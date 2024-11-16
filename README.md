@@ -12,7 +12,7 @@ python -m pip install -r requirements.txt
 
 # Sources configuration
 
-The sources are defined in the `configy.py` file. You can add or remove sources from the list.
+The sources are defined in the `config.py` file. You can add or remove sources from the list.
 
 ```python
 news_sources = ["https://example.com/rss", "https://example2.com/rss"]
