@@ -1,7 +1,9 @@
 from typing import Callable, Union
 import xml.etree.ElementTree as ET
+from xml.etree.ElementTree import Element
+
 from app.news_types import NewsResponse
-from app.text_parsers import format_date_text
+from app.text_parsers import format_date_text, trim_text
 
 
 class XmlFeedParser:
@@ -13,41 +15,58 @@ class XmlFeedParser:
         root = ET.fromstring(xml)
         articles = []
         feed_name = self.get_text(root, ".//title")
-        if self.name_formatter is not None:
+        if feed_name is None:
+            feed_name = ""
+        elif self.name_formatter is not None:
             feed_name = self.name_formatter(feed_name)
 
         for item in root.findall(".//item"):
-            articles.append(
-                {
-                    "source": {"id": "", "name": feed_name},
-                    "author": "",
-                    "title": self.get_text(item, "title"),
-                    "description": self.get_text(item, "description"),
-                    "url": self.get_text(item, "link"),
-                    "urlToImage": "",
-                    "publishedAt": self.get_datetime(item, "pubDate"),
-                    "content": "",
-                }
-            )
+            article_item = {
+                "source": {"id": "", "name": feed_name},
+                "author": "",
+                "title": self.get_text(item, "title"),
+                "description": self.get_text(item, "description"),
+                "url": self.get_text(item, "link"),
+                "urlToImage": "",
+                "publishedAt": self.get_datetime(item, "pubDate"),
+                "content": "",
+            }
+
+            if self.is_a_valid_article(article_item):
+                articles.append(article_item)
 
             if self.limit is not None and len(articles) >= self.limit:
                 break
 
         return {"status": "ok", "totalResults": len(articles), "articles": articles}
 
-    def get_text(self, element, tag, attribute=None):
-        if attribute is not None:
-            return (
-                element.find(tag).get(attribute)
-                if element.find(tag) is not None
-                else ""
-            )
-        return element.find(tag).text if element.find(tag) is not None else ""
+    def is_a_valid_article(self, article_item):
+        return (
+            article_item["title"] is not None
+            and article_item["url"] is not None
+            and article_item["publishedAt"] is not None
+        )
 
-    def get_datetime(self, element, tag, attribute=None):
+    def get_text(self, element: Element, tag, attribute=None):
+        text_element = element.find(tag)
+        if text_element is None:
+            return ""
+
+        text = ""
+        if text_element is not None:
+            if attribute is not None:
+                text_attribute = text_element.get(attribute)
+                text = text_attribute if text_attribute is not None else ""
+            else:
+                text = text_element.text
+
+        return trim_text(text)
+
+    def get_datetime(self, element: Element, tag, attribute=None):
         text = self.get_text(element, tag, attribute)
-        if text is not None:
-            if text is not None and self.date_time_formatter is not None:
-                return self.date_time_formatter(text)
-            return format_date_text(text)
-        return ""
+        if text is None or len(text) == 0:
+            return ""
+
+        if self.date_time_formatter is not None:
+            return self.date_time_formatter(text)
+        return format_date_text(text)

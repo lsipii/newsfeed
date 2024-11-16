@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 import signal
 import sys
 import logging
-import threading
+import time
 from math import floor
 
 from rich.live import Live
@@ -13,12 +13,12 @@ from app.NewsFeed import NewsFeed
 from config import news_sources
 
 
-def get_articles_table(news_feed: NewsFeed):
+def get_articles_table(console: Console, news_feed: NewsFeed):
     articles = news_feed.get_latest_articles()
 
     table = Table(box=None)
-    (_console_width, console_height) = Console().size
-    max_rows = console_height
+    (_console_width, console_height) = console.size
+    max_rows = console_height - 2
     article_rows = 4
     max_articles = floor(max_rows / article_rows)
 
@@ -42,31 +42,50 @@ def get_articles_table(news_feed: NewsFeed):
 
 def main():
     load_dotenv()
-    news_feed = NewsFeed(news_sources=news_sources, update_frequency_in_seconds=300)
+    update_frequency_in_seconds = 300
+    news_feed = NewsFeed(
+        news_sources=news_sources,
+    )
     console = Console()
 
-    # Start the feed scheduler in a separate thread
-    scheduler_thread = threading.Thread(target=news_feed.start_feed_scheduler)
-    scheduler_thread.daemon = True
-    scheduler_thread.start()
-
     def signal_handler(_sig, _frame):
-        logging.info("Stopping the news feed...")
-        news_feed.stop_feed_scheduler()
-        scheduler_thread.join()  # Wait for the scheduler thread to finish
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
 
     with Live(
         console=console,
-        auto_refresh=True,
-        screen=True,
+        auto_refresh=False,
+        screen=False,
     ) as live:
+        elapsed_time = 0
+        reference_console_width, reference_console_height = console.size
+
         while True:
+            current_console_width, current_console_height = console.size
             try:
-                table = get_articles_table(news_feed)
-                live.update(table)
+                refresh_interval_elapsed = (
+                    elapsed_time == 0 or elapsed_time >= update_frequency_in_seconds
+                )
+                console_resized = (
+                    reference_console_width != current_console_width
+                    or reference_console_height != current_console_height
+                )
+
+                if refresh_interval_elapsed or console_resized:
+                    if console_resized:
+                        reference_console_width, reference_console_height = (
+                            current_console_width,
+                            current_console_height,
+                        )
+                    if refresh_interval_elapsed:
+                        elapsed_time = 0
+
+                    table = get_articles_table(console, news_feed)
+                    live.update(table, refresh=True)
+
+                time.sleep(1)
+                elapsed_time += 1
             except KeyboardInterrupt:
                 logging.debug("Exiting gracefully...")
                 break
