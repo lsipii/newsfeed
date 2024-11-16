@@ -1,12 +1,28 @@
 from dateutil.parser import parse as dateutil_parse
+from zoneinfo import ZoneInfo
+from datetime import datetime
 
 
 def format_date_text(date_text: str) -> str:
     try:
-        date_object = dateutil_parse(date_text)
-        return date_object.strftime("%Y-%m-%d %H:%M:%S")
+        parsed_date = dateutil_parse(date_text)
+
+        # Get the local timezone
+        local_tz = datetime.now().astimezone().tzinfo
+
+        # Convert the datetime object to the local timezone
+        if parsed_date.tzinfo is None:
+            # If the parsed datetime is naive, assume it's UTC
+            parsed_date = parsed_date.replace(tzinfo=ZoneInfo("UTC"))
+
+        local_date = parsed_date.astimezone(local_tz)
+
+        # Return the formatted local time string
+        return local_date.strftime("%Y-%m-%d %H:%M:%S")
     except ValueError:
         return date_text
+    except Exception:
+        return ""
 
 
 def parse_domain(url: str) -> str:

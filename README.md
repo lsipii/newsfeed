@@ -1,7 +1,10 @@
 # newsfeed
 Simple command line news aggregator
 
-# Install requirements
+# Requirements
+- Python 3.9 or higher
+
+# Install dependencies
 
 ```bash
 python -m pip install -r requirements.txt
