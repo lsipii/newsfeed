@@ -1,27 +1,29 @@
 from dotenv import load_dotenv
-
+import signal
+import sys
 import time
+import logging
+
 from rich.live import Live
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
 
-from app.news_service import get_articles
-
-news_sources = [
-    "https://newsapi.org/v2/top-headlines?sources=reuters,bbc-news,cnn",
-    "https://www.hs.fi/rss/tuoreimmat.xml",
-    "https://www.is.fi/rss/tuoreimmat.xml",
-    "https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_UUTISET",
-]
+from app.NewsFeed import NewsFeed
+from config import news_sources
 
 
-def get_articles_table():
-    articles = get_articles(news_sources)
+def get_articles_table(news_feed: NewsFeed):
+    articles = news_feed.get_articles(news_sources)
 
     table = Table(box=None)
 
-    table.add_column("Source", style="magenta", no_wrap=True)
-    table.add_column("Title", style="cyan")
+    table.add_column(
+        "Source",
+        style="dark_sea_green4",
+        no_wrap=True,
+    )
+    table.add_column("Title", style="cyan", overflow="fold")
 
     for article in articles:
         table.add_row(article["source"]["name"], article["title"])
@@ -30,7 +32,7 @@ def get_articles_table():
             f"[green]{article['publishedAt']}[/green]",
             f"[blue underline]{article['url']}[/blue underline]",
         )
-        table.add_row("---", "")
+        table.add_row("", "")
         table.add_row("", "")
 
     return table
@@ -38,15 +40,35 @@ def get_articles_table():
 
 def main():
     load_dotenv()
-
+    news_feed = NewsFeed()
     console = Console()
 
+    def signal_handler(_sig, _frame):
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     # Get news articles every 5 minutes
-    with Live(console=console, auto_refresh=False, screen=False) as live:
+    with Live(
+        console=console,
+        auto_refresh=False,
+        screen=False,
+        vertical_overflow="visible",
+    ) as live:
         while True:
-            # Update articles dynamically here if needed
-            live.update(get_articles_table(), refresh=True)
-            time.sleep(300)  # Refresh every 5 minutes (300 seconds)
+            try:
+                table = get_articles_table(news_feed)
+                """ panel = Panel(
+                    table,
+                    height=console.size.height,
+                    title="News Feed",
+                    border_style="blue",
+                ) """
+                live.update(table, refresh=True)
+                time.sleep(300)  # Refresh every 5 minutes (300 seconds)
+            except KeyboardInterrupt:
+                logging.debug("Exiting gracefully...")
+                break
 
 
 if __name__ == "__main__":
