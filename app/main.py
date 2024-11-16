@@ -14,6 +14,7 @@ news_sources = [
     "https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_UUTISET",
 ]
 
+
 def get_articles_table():
     articles = get_articles(news_sources)
 
@@ -23,13 +24,17 @@ def get_articles_table():
     table.add_column("Title", style="cyan")
 
     for article in articles:
-        table.add_row(article["source"]['name'], article["title"])
+        table.add_row(article["source"]["name"], article["title"])
         # Add a separate row for the URL
-        table.add_row(f"[green]{article['publishedAt']}[/green]", f"[blue underline]{article['url']}[/blue underline]")
+        table.add_row(
+            f"[green]{article['publishedAt']}[/green]",
+            f"[blue underline]{article['url']}[/blue underline]",
+        )
         table.add_row("---", "")
         table.add_row("", "")
 
     return table
+
 
 def main():
     load_dotenv()
@@ -42,6 +47,7 @@ def main():
             # Update articles dynamically here if needed
             live.update(get_articles_table(), refresh=True)
             time.sleep(300)  # Refresh every 5 minutes (300 seconds)
+
 
 if __name__ == "__main__":
     main()

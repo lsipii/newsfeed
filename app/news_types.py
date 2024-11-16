@@ -1,10 +1,10 @@
-
 from typing import List, TypedDict
 
 
 class NewsSource(TypedDict):
     id: str
     name: str
+
 
 class NewsArticle(TypedDict):
     source: NewsSource
@@ -15,6 +15,7 @@ class NewsArticle(TypedDict):
     urlToImage: str
     publishedAt: str
     content: str
+
 
 class NewsResponse(TypedDict):
     status: str
