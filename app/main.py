@@ -58,7 +58,6 @@ def main():
 
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Get news articles every 5 minutes
     with Live(
         console=console,
         auto_refresh=True,
