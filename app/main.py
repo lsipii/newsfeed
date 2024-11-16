@@ -52,9 +52,7 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
 
     with Live(
-        console=console,
-        auto_refresh=False,
-        screen=False,
+        console=console, auto_refresh=False, screen=False, vertical_overflow="visible"
     ) as live:
         elapsed_time = 0
         reference_console_width, reference_console_height = console.size
