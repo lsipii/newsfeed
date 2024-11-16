@@ -32,9 +32,7 @@ def get_articles_table(console: Console, news_feed: NewsFeed):
             f"[green]{article['publishedAt']}[/green] - {article['source']['name']}"
         )
         table.add_row(f"[bold]{article['title']}[/bold]")
-        table.add_row(
-            f"[dark_sea_green underline]{article['url']}[/dark_sea_green underline]", ""
-        )
+        table.add_row(f"[grey35]{article['url']}[/grey35]", "")
         table.add_row("", "")
 
     return table

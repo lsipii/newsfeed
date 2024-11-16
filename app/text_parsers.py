@@ -2,6 +2,7 @@ from dateutil.parser import parse as dateutil_parse
 from zoneinfo import ZoneInfo
 from datetime import datetime
 from typing import Union
+from config import date_time_format
 
 
 def format_date_text(date_text: str) -> str:
@@ -19,7 +20,7 @@ def format_date_text(date_text: str) -> str:
         local_date = parsed_date.astimezone(local_tz)
 
         # Return the formatted local time string
-        return local_date.strftime("%Y-%m-%d %H:%M:%S")
+        return local_date.strftime(date_time_format)
     except ValueError:
         return date_text
     except Exception:

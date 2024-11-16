@@ -5,3 +5,8 @@ news_sources = [
     "https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_UUTISET",
     "https://feeds.kauppalehti.fi/rss/main",
 ]
+
+"""
+@see: python time formats: https://strftime.org/
+"""
+date_time_format = "%d.%m.%Y %H:%M:%S"
