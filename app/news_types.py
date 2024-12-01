@@ -14,6 +14,7 @@ class NewsArticle(TypedDict):
     url: str
     urlToImage: str
     publishedAt: str
+    publishedAtTimestamp: int
     content: str
 
 

@@ -5,7 +5,8 @@ import requests
 from app.exceptions import NewsSourceException
 from app.news_types import NewsResponse
 from app.text_parsers import (
-    format_date_text,
+    format_date,
+    parse_date_from_text,
     parse_domain,
 )
 from app.xml_feed_parser import XmlFeedParser
@@ -31,9 +32,10 @@ class NewsFeed:
                 logging.debug(f"Error fetching articles from {source}: {e}")
 
         # Sort articles by published time
-        articles_from_all_sources.sort(key=lambda x: x["publishedAt"], reverse=False)
-
-        return articles_from_all_sources
+        return sorted(
+            articles_from_all_sources,
+            key=lambda article: article["publishedAtTimestamp"],
+        )
 
     def get_news_from_source(self, source: str, limit: int) -> NewsResponse:
         domain = parse_domain(source)
@@ -60,7 +62,9 @@ class NewsFeed:
             return parsed
 
         for article in parsed["articles"]:
-            article["publishedAt"] = format_date_text(article["publishedAt"])
+            date_time = parse_date_from_text(article["publishedAt"])
+            article["publishedAt"] = format_date(date_time) if date_time else ""
+            article["publishedAtTimestamp"] = date_time.timestamp() if date_time else 0
         return parsed
 
     def get_news_from_sanomat(self, source: str, limit: int) -> NewsResponse:

@@ -5,7 +5,7 @@ from typing import Union
 from config import date_time_format
 
 
-def format_date_text(date_text: str) -> str:
+def parse_date_from_text(date_text: str) -> Union[datetime, None]:
     try:
         parsed_date = dateutil_parse(date_text)
 
@@ -20,7 +20,24 @@ def format_date_text(date_text: str) -> str:
         local_date = parsed_date.astimezone(local_tz)
 
         # Return the formatted local time string
-        return local_date.strftime(date_time_format)
+        return local_date
+    except Exception:
+        pass
+    return None
+
+
+def format_date(date: datetime) -> str:
+    return date.strftime(date_time_format)
+
+
+def format_date_text(date_text: str) -> str:
+    try:
+        parsed_date = parse_date_from_text(date_text)
+        if parsed_date is None:
+            return date_text
+
+        # Return the formatted local time string
+        return format_date(parsed_date)
     except ValueError:
         return date_text
     except Exception:

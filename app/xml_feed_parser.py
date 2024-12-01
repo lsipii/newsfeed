@@ -1,13 +1,14 @@
+from datetime import datetime
 from typing import Callable, Union
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 
 from app.news_types import NewsResponse
-from app.text_parsers import format_date_text, trim_text
+from app.text_parsers import format_date, parse_date_from_text, trim_text
 
 
 class XmlFeedParser:
-    date_time_formatter: Union[Callable[[str], str], None] = None
+    date_time_formatter: Union[Callable[[Union[datetime, None]], str], None] = None
     name_formatter: Union[Callable[[str], str], None] = None
     limit: Union[int, None] = None
 
@@ -21,6 +22,7 @@ class XmlFeedParser:
             feed_name = self.name_formatter(feed_name)
 
         for item in root.findall(".//item"):
+            date_time = self.get_datetime(item, "pubDate")
             article_item = {
                 "source": {"id": "", "name": feed_name},
                 "author": "",
@@ -28,7 +30,8 @@ class XmlFeedParser:
                 "description": self.get_text(item, "description"),
                 "url": self.get_text(item, "link"),
                 "urlToImage": "",
-                "publishedAt": self.get_datetime(item, "pubDate"),
+                "publishedAt": self.format_datetime(date_time),
+                "publishedAtTimestamp": date_time.timestamp() if date_time else 0,
                 "content": "",
             }
 
@@ -62,11 +65,17 @@ class XmlFeedParser:
 
         return trim_text(text)
 
-    def get_datetime(self, element: Element, tag, attribute=None):
+    def get_datetime(
+        self, element: Element, tag, attribute=None
+    ) -> Union[datetime, None]:
         text = self.get_text(element, tag, attribute)
         if text is None or len(text) == 0:
-            return ""
+            return None
+        return parse_date_from_text(text)
 
+    def format_datetime(self, datetime: Union[datetime, None]) -> str:
+        if datetime is None:
+            return ""
         if self.date_time_formatter is not None:
-            return self.date_time_formatter(text)
-        return format_date_text(text)
+            return self.date_time_formatter(datetime)
+        return format_date(datetime)
