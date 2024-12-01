@@ -28,7 +28,7 @@ class NewsFeed:
                 response = self.get_news_from_source(source, 10)
                 for article in response["articles"]:
                     articles_from_all_sources.append(article)
-            except NewsSourceException as e:
+            except Exception as e:
                 logging.debug(f"Error fetching articles from {source}: {e}")
 
         # Sort articles by published time
