@@ -10,3 +10,8 @@ news_sources = [
 @see: python time formats: https://strftime.org/
 """
 date_time_format = "%d.%m.%Y %H:%M:%S"
+
+"""
+How often the news feed is updated (in seconds).
+"""
+news_update_frequency_in_seconds = 300

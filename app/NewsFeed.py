@@ -1,9 +1,10 @@
 import os
 import logging
+from typing import List, Union
 import requests
 
 from app.exceptions import NewsSourceException
-from app.news_types import NewsResponse
+from app.news_types import NewsArticle, NewsResponse
 from app.text_parsers import (
     format_date,
     parse_date_from_text,
@@ -21,7 +22,10 @@ class NewsFeed:
     ):
         self.news_sources = news_sources
 
-    def get_latest_articles(self):
+    def get_latest_articles(self, limit: Union[int, None] = None) -> List[NewsArticle]:
+        """
+        @param limit: The number of latest articles to return. If None, all articles are returned.
+        """
         articles_from_all_sources = []
         for source in self.news_sources:
             try:
@@ -32,10 +36,12 @@ class NewsFeed:
                 logging.debug(f"Error fetching articles from {source}: {e}")
 
         # Sort articles by published time
-        return sorted(
+        articles = sorted(
             articles_from_all_sources,
             key=lambda article: article["publishedAtTimestamp"],
         )
+
+        return articles[-limit:] if limit else articles
 
     def get_news_from_source(self, source: str, limit: int) -> NewsResponse:
         domain = parse_domain(source)
