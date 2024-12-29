@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 from datetime import datetime
 from typing import Union
 from config import date_time_format
+import re
 
 
 def parse_date_from_text(date_text: str) -> Union[datetime, None]:
@@ -51,4 +52,4 @@ def parse_domain(url: str) -> str:
 def trim_text(text: Union[str, None]) -> str:
     trimmed_text = text.strip() if text is not None else ""
     # Replace newlines and tabs with spaces
-    return trimmed_text.replace("\n", " ").replace("\t", " ")
+    return re.sub(r"[\n\r\t\v]", " ", trimmed_text)
