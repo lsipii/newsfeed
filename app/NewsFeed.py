@@ -32,9 +32,10 @@ class NewsFeed:
             self.update(limit=limit)
         return self.articles[-limit:] if limit else self.articles
 
-    def update(self, limit: Union[int, None] = None) -> List[NewsArticle]:
+    def update(self, limit: Union[int, None] = None) -> bool:
         """
         @param limit: The number of latest articles to return. If None, all articles are returned.
+        @return: True if new articles found, False otherwise.
         """
         articles_from_all_sources = []
         for source in self.news_sources:
@@ -51,8 +52,11 @@ class NewsFeed:
             key=lambda article: article["publishedAtTimestamp"],
         )
 
-        self.articles = articles[-limit:] if limit else articles
-        return self.articles
+        articles = articles[-limit:] if limit else articles
+        has_updates = articles != self.articles
+        self.articles = articles
+
+        return has_updates
 
     def get_news_from_source(self, source: str, limit: int) -> NewsResponse:
         domain = parse_domain(source)

@@ -43,8 +43,9 @@ def main():
         print(term.move_y(term.height - 1))
 
         while True:
-            news_feed.update()
-            render_articles(term, news_feed)
+            has_updates = news_feed.update()
+            if has_updates:
+                render_articles(term, news_feed)
             time.sleep(news_update_frequency_in_seconds)
 
 
