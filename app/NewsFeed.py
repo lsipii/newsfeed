@@ -1,8 +1,11 @@
 import os
 import logging
 import requests
+import time
+from typing import Union
+
 from app.exceptions import NewsSourceException
-from app.news_types import NewsResponse
+from app.news_types import NewsResponse, NewsArticle
 from app.text_parsers import (
     format_date_text,
     parse_domain,
@@ -11,9 +14,51 @@ from app.xml_feed_parser import XmlFeedParser
 
 
 class NewsFeed:
-    def get_articles(self, news_sources: list[str]):
+    news_sources: list[str]
+    articles: list[NewsArticle] = []
+    update_frequency_in_seconds: int = 300
+    elapsed_time: int = 0
+
+    state = {
+        "in_progress": False,
+    }
+
+    def __init__(
+        self,
+        news_sources: list[str],
+        update_frequency_in_seconds: Union[int, None] = None,
+    ):
+        self.news_sources = news_sources
+        if update_frequency_in_seconds is not None:
+            self.update_frequency_in_seconds = update_frequency_in_seconds
+
+    def get_latest_articles(self):
+        return self.articles
+
+    def start_feed_scheduler(self):
+        if self.state["in_progress"]:
+            return
+
+        self.state["in_progress"] = True
+        elapsed_time = 0
+        while self.state["in_progress"]:
+            if elapsed_time == 0 or elapsed_time >= self.update_frequency_in_seconds:
+                try:
+                    self.articles = self.get_new_articles()
+                except Exception as e:
+                    logging.debug(f"Error fetching articles: {e}")
+                elapsed_time = (
+                    0  # Reset the elapsed time every time we fetch new articles
+                )
+            time.sleep(1)
+            elapsed_time += 1
+
+    def stop_feed_scheduler(self):
+        self.state["in_progress"] = False
+
+    def get_new_articles(self):
         articles_from_all_sources = []
-        for source in news_sources:
+        for source in self.news_sources:
             try:
                 response = self.get_news_from_source(source, 10)
                 for article in response["articles"]:
