@@ -13,14 +13,10 @@ from app.NewsFeed import NewsFeed
 from config import news_sources
 
 
-def get_articles_table(console: Console, news_feed: NewsFeed):
+def get_articles_table(max_articles: int, news_feed: NewsFeed):
     articles = news_feed.get_latest_articles()
 
     table = Table(box=None)
-    (_console_width, console_height) = console.size
-    max_rows = console_height - 2
-    article_rows = 4
-    max_articles = floor(max_rows / article_rows)
 
     # Pick the last N articles
     print_articles = articles[-max_articles:]
@@ -77,7 +73,13 @@ def main():
                     if refresh_interval_elapsed:
                         elapsed_time = 0
 
-                    table = get_articles_table(console, news_feed)
+                    # Calculate the number of articles that can be displayed
+                    max_rows = reference_console_height - 2
+                    article_rows = 4
+                    max_articles = floor(max_rows / article_rows)
+
+                    # Get the latest articles
+                    table = get_articles_table(max_articles, news_feed)
                     live.update(table, refresh=True)
 
                 time.sleep(1)
