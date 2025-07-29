@@ -15,14 +15,24 @@ from app.xml_feed_parser import XmlFeedParser
 
 class NewsFeed:
     news_sources: list[str]
+    articles: list[NewsArticle]
 
     def __init__(
         self,
         news_sources: list[str],
     ):
         self.news_sources = news_sources
+        self.articles = []
 
     def get_latest_articles(self, limit: Union[int, None] = None) -> List[NewsArticle]:
+        """
+        Returns the latest articles from all sources.
+        """
+        if not self.articles:
+            self.update(limit=limit)
+        return self.articles[-limit:] if limit else self.articles
+
+    def update(self, limit: Union[int, None] = None) -> List[NewsArticle]:
         """
         @param limit: The number of latest articles to return. If None, all articles are returned.
         """
@@ -41,7 +51,8 @@ class NewsFeed:
             key=lambda article: article["publishedAtTimestamp"],
         )
 
-        return articles[-limit:] if limit else articles
+        self.articles = articles[-limit:] if limit else articles
+        return self.articles
 
     def get_news_from_source(self, source: str, limit: int) -> NewsResponse:
         domain = parse_domain(source)
