@@ -5,7 +5,7 @@ import requests
 import traceback
 
 from app.exceptions import NewsSourceException
-from app.news_types import NewsArticle, NewsResponse
+from app.news_types import NewsAppConfig, NewsArticle, NewsResponse
 from app.text_parsers import (
     format_date,
     parse_date_from_text,
@@ -15,14 +15,16 @@ from app.XmlFeedParser import XmlFeedParser
 
 
 class NewsFeed:
+    date_time_format: str
     news_sources: list[str]
     articles: list[NewsArticle]
 
     def __init__(
         self,
-        news_sources: list[str],
+        config: NewsAppConfig,
     ):
-        self.news_sources = news_sources
+        self.news_sources = config["news_sources"]
+        self.date_time_format = config["date_time_format"]
         self.articles = []
 
     def get_latest_articles(self, limit: Union[int, None] = None) -> List[NewsArticle]:
@@ -95,13 +97,13 @@ class NewsFeed:
 
         for article in parsed["articles"]:
             date_time = parse_date_from_text(article["publishedAt"])
-            article["publishedAt"] = format_date(date_time) if date_time else ""
+            article["publishedAt"] = format_date(date_time, self.date_time_format) if date_time else ""
             article["publishedAtTimestamp"] = date_time.timestamp() if date_time else 0
         return parsed
 
     def get_news_from_sanomat(self, source: str, limit: int) -> NewsResponse:
         response_text = self.get_raw_response_from_source(source)
-        xml_feed_parser = XmlFeedParser()
+        xml_feed_parser = XmlFeedParser(date_time_format=self.date_time_format)
 
         xml_feed_parser.limit = limit
         xml_feed_parser.name_formatter = lambda name: name.split(" - ")[1]
@@ -111,7 +113,7 @@ class NewsFeed:
 
     def get_news_from_yle(self, source: str, limit: int) -> NewsResponse:
         response_text = self.get_raw_response_from_source(source)
-        xml_feed_parser = XmlFeedParser()
+        xml_feed_parser = XmlFeedParser(date_time_format=self.date_time_format)
 
         xml_feed_parser.limit = limit
         xml_feed_parser.name_formatter = lambda name: name.split(" | ")[0]
@@ -121,7 +123,7 @@ class NewsFeed:
 
     def get_news_from_kauppalehti(self, source: str, limit: int) -> NewsResponse:
         response_text = self.get_raw_response_from_source(source)
-        xml_feed_parser = XmlFeedParser()
+        xml_feed_parser = XmlFeedParser(date_time_format=self.date_time_format)
 
         xml_feed_parser.limit = limit
         xml_feed_parser.name_formatter = lambda name: name.split(" | ")[1]
@@ -132,7 +134,7 @@ class NewsFeed:
     
     def get_news_from_template_source(self, source: str, limit: int) -> NewsResponse:
         response_text = self.get_raw_response_from_source(source)
-        xml_feed_parser = XmlFeedParser()
+        xml_feed_parser = XmlFeedParser(date_time_format=self.date_time_format)
 
         xml_feed_parser.limit = limit
         parsed = xml_feed_parser.parse(response_text)

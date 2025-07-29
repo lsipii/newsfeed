@@ -2,7 +2,6 @@ from dateutil.parser import parse as dateutil_parse
 from zoneinfo import ZoneInfo
 from datetime import datetime
 from typing import Union
-from config import date_time_format
 import re
 
 
@@ -27,18 +26,18 @@ def parse_date_from_text(date_text: str) -> Union[datetime, None]:
     return None
 
 
-def format_date(date: datetime) -> str:
+def format_date(date: datetime, date_time_format: str) -> str:
     return date.strftime(date_time_format)
 
 
-def format_date_text(date_text: str) -> str:
+def format_date_text(date_text: str, date_time_format: str) -> str:
     try:
         parsed_date = parse_date_from_text(date_text)
         if parsed_date is None:
             return date_text
 
         # Return the formatted local time string
-        return format_date(parsed_date)
+        return format_date(parsed_date, date_time_format)
     except ValueError:
         return date_text
     except Exception:

@@ -1,12 +1,10 @@
 import signal
 import sys
 from typing import List
-from dotenv import load_dotenv
 import time
 from blessed import Terminal
 from app.NewsFeed import NewsFeed
-from app.news_types import NewsArticle
-from config import news_sources, news_update_frequency_in_seconds
+from app.news_types import NewsAppConfig, NewsArticle
 
 
 def fetch_and_render_articles(term: Terminal, news_feed: NewsFeed):
@@ -23,11 +21,10 @@ def render_articles(term: Terminal, articles: List[NewsArticle]):
         print(term.gray(article["url"]))
         print(term.move_y(term.height - 1))
 
-def main():
-    
-    load_dotenv()
+def execute(config: NewsAppConfig):
+
     news_feed = NewsFeed(
-        news_sources=news_sources,
+        config=config,
     )
     term = Terminal()
 
@@ -49,8 +46,5 @@ def main():
             has_updates = news_feed.update()
             if has_updates:
                 fetch_and_render_articles(term, news_feed)
-            time.sleep(news_update_frequency_in_seconds)
+            time.sleep(config['news_update_frequency_in_seconds'])
 
-
-if __name__ == "__main__":
-    main()

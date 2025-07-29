@@ -8,9 +8,15 @@ from app.text_parsers import format_date, parse_date_from_text, trim_text
 
 
 class XmlFeedParser:
-    date_time_formatter: Union[Callable[[Union[datetime, None]], str], None] = None
+    date_time_formatter: Union[Callable[[Union[datetime, None], Union[str, None]], str], None] = None
     name_formatter: Union[Callable[[str], str], None] = None
     limit: Union[int, None] = None
+
+    def __init__(
+        self,
+        date_time_format: str,
+    ):
+        self.date_time_format = date_time_format
 
     def parse(self, xml: str) -> NewsResponse:
         root = ET.fromstring(xml)
@@ -78,5 +84,5 @@ class XmlFeedParser:
         if datetime is None:
             return ""
         if self.date_time_formatter is not None:
-            return self.date_time_formatter(datetime)
-        return format_date(datetime)
+            return self.date_time_formatter(datetime, self.date_time_format)
+        return format_date(datetime, self.date_time_format)
