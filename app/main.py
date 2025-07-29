@@ -7,7 +7,6 @@ import logging
 from rich.live import Live
 from rich.console import Console
 from rich.table import Table
-from rich.panel import Panel
 
 from app.NewsFeed import NewsFeed
 from config import news_sources
@@ -58,12 +57,6 @@ def main():
         while True:
             try:
                 table = get_articles_table(news_feed)
-                """ panel = Panel(
-                    table,
-                    height=console.size.height,
-                    title="News Feed",
-                    border_style="blue",
-                ) """
                 live.update(table, refresh=True)
                 time.sleep(300)  # Refresh every 5 minutes (300 seconds)
             except KeyboardInterrupt:
