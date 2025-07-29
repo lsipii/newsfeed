@@ -16,7 +16,7 @@ from config import news_sources
 def get_articles_table(max_articles: int, news_feed: NewsFeed):
     articles = news_feed.get_latest_articles()
 
-    table = Table(box=None)
+    table = Table(box=None, pad_edge=False, expand=True)
 
     # Pick the last N articles
     print_articles = articles[-max_articles:]
