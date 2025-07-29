@@ -19,7 +19,7 @@ def get_news(source: str, limit: int) -> NewsResponse:
             raise ValueError(f"Unknown news source: {domain}")
 
 def get_news_from_newsapi(source: str) -> NewsResponse:
-    news_api_key = os.getenv("NEWS_API_KEY")
+    news_api_key = os.getenv("NEWSAPI_ORG_KEY")
     if news_api_key is None:
         raise NewsSourceException("Missing News API key")
     
