@@ -1,6 +1,7 @@
 from dateutil.parser import parse as dateutil_parse
 from zoneinfo import ZoneInfo
 from datetime import datetime
+from typing import Union
 
 
 def format_date_text(date_text: str) -> str:
@@ -27,3 +28,9 @@ def format_date_text(date_text: str) -> str:
 
 def parse_domain(url: str) -> str:
     return url.split("/")[2]
+
+
+def trim_text(text: Union[str, None]) -> str:
+    trimmed_text = text.strip() if text is not None else ""
+    # Replace newlines and tabs with spaces
+    return trimmed_text.replace("\n", " ").replace("\t", " ")
