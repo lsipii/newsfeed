@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from app import main as app
+from app.main import main
 
 if __name__ == "__main__":
-    app.main()
+    main()

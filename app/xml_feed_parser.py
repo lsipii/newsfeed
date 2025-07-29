@@ -1,6 +1,7 @@
 from typing import Callable, Union
 import xml.etree.ElementTree as ET
 from app.news_types import NewsResponse
+from app.text_parsers import format_date_text
 
 
 class XmlFeedParser:
@@ -45,6 +46,8 @@ class XmlFeedParser:
 
     def get_datetime(self, element, tag, attribute=None):
         text = self.get_text(element, tag, attribute)
-        if text is not None and self.date_time_formatter is not None:
-            return self.date_time_formatter(text)
-        return text
+        if text is not None:
+            if text is not None and self.date_time_formatter is not None:
+                return self.date_time_formatter(text)
+            return format_date_text(text)
+        return ""
