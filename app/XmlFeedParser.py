@@ -15,12 +15,13 @@ class XmlFeedParser:
     def parse(self, xml: str) -> NewsResponse:
         root = ET.fromstring(xml)
         articles = []
+
         feed_name = self.get_text(root, ".//title")
         if feed_name is None:
             feed_name = ""
         elif self.name_formatter is not None:
             feed_name = self.name_formatter(feed_name)
-
+        
         for item in root.findall(".//item"):
             date_time = self.get_datetime(item, "pubDate")
             article_item = {
@@ -40,7 +41,7 @@ class XmlFeedParser:
 
             if self.limit is not None and len(articles) >= self.limit:
                 break
-
+        
         return {"status": "ok", "totalResults": len(articles), "articles": articles}
 
     def is_a_valid_article(self, article_item):
@@ -50,7 +51,7 @@ class XmlFeedParser:
             and article_item["publishedAt"] is not None
         )
 
-    def get_text(self, element: Element, tag, attribute=None):
+    def get_text(self, element: Element, tag: str, attribute=None):
         text_element = element.find(tag)
         if text_element is None:
             return ""

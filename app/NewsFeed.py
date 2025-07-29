@@ -2,6 +2,7 @@ import os
 import logging
 from typing import List, Union
 import requests
+import traceback
 
 from app.exceptions import NewsSourceException
 from app.news_types import NewsArticle, NewsResponse
@@ -10,7 +11,7 @@ from app.text_parsers import (
     parse_date_from_text,
     parse_domain,
 )
-from app.xml_feed_parser import XmlFeedParser
+from app.XmlFeedParser import XmlFeedParser
 
 
 class NewsFeed:
@@ -44,19 +45,29 @@ class NewsFeed:
                 for article in response["articles"]:
                     articles_from_all_sources.append(article)
             except Exception as e:
+                traceback.print_exc()
                 logging.debug(f"Error fetching articles from {source}: {e}")
 
-        # Sort articles by published time
-        articles = sorted(
-            articles_from_all_sources,
-            key=lambda article: article["publishedAtTimestamp"],
-        )
+        # Get sorted articles
+        articles = self.sort_and_filter_articles(articles=articles_from_all_sources, limit=limit)
 
-        articles = articles[-limit:] if limit else articles
         has_updates = articles != self.articles
         self.articles = articles
 
         return has_updates
+
+    def sort_and_filter_articles(self, articles: List[NewsArticle], limit: Union[int, None] = None) -> List[NewsArticle]:
+        """
+        Sorts and filters articles by published date.
+        """
+        sorted_articles = sorted(
+            articles,
+            key=lambda article: article["publishedAtTimestamp"],
+        )
+
+        sorted_articles = sorted_articles[-limit:] if limit else sorted_articles
+
+        return sorted_articles
 
     def get_news_from_source(self, source: str, limit: int) -> NewsResponse:
         domain = parse_domain(source)
@@ -70,7 +81,7 @@ class NewsFeed:
             case "feeds.kauppalehti.fi":
                 return self.get_news_from_kauppalehti(source, limit)
             case _:
-                raise ValueError(f"Unknown news source: {domain}")
+                return self.get_news_from_template_source(source, limit)
 
     def get_news_from_newsapi(self, source: str) -> NewsResponse:
         news_api_key = os.getenv("NEWSAPI_ORG_KEY")
@@ -89,31 +100,52 @@ class NewsFeed:
         return parsed
 
     def get_news_from_sanomat(self, source: str, limit: int) -> NewsResponse:
-        response = requests.get(source)
+        response_text = self.get_raw_response_from_source(source)
         xml_feed_parser = XmlFeedParser()
 
         xml_feed_parser.limit = limit
         xml_feed_parser.name_formatter = lambda name: name.split(" - ")[1]
 
-        parsed = xml_feed_parser.parse(response.text)
+        parsed = xml_feed_parser.parse(response_text)
         return parsed
 
     def get_news_from_yle(self, source: str, limit: int) -> NewsResponse:
-        response = requests.get(source)
+        response_text = self.get_raw_response_from_source(source)
         xml_feed_parser = XmlFeedParser()
 
         xml_feed_parser.limit = limit
         xml_feed_parser.name_formatter = lambda name: name.split(" | ")[0]
 
-        parsed = xml_feed_parser.parse(response.text)
+        parsed = xml_feed_parser.parse(response_text)
         return parsed
 
     def get_news_from_kauppalehti(self, source: str, limit: int) -> NewsResponse:
-        response = requests.get(source)
+        response_text = self.get_raw_response_from_source(source)
         xml_feed_parser = XmlFeedParser()
 
         xml_feed_parser.limit = limit
         xml_feed_parser.name_formatter = lambda name: name.split(" | ")[1]
 
-        parsed = xml_feed_parser.parse(response.text)
+        parsed = xml_feed_parser.parse(response_text)
+        
         return parsed
+    
+    def get_news_from_template_source(self, source: str, limit: int) -> NewsResponse:
+        response_text = self.get_raw_response_from_source(source)
+        xml_feed_parser = XmlFeedParser()
+
+        xml_feed_parser.limit = limit
+        parsed = xml_feed_parser.parse(response_text)
+        
+        return parsed
+
+    def get_raw_response_from_source(self, source: str) -> str:
+        """
+        Returns the raw XML response from the news source.
+        """
+        response = requests.get(source, headers={"User-Agent": "NewsFeedApp/1.0"})
+        if response.status_code != 200:
+            logging.debug(f"Failed to fetch news from {source}: {response.status_code}")
+            raise NewsSourceException(f"Failed to fetch news from {source}")
+        
+        return response.text
