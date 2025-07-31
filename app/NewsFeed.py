@@ -4,10 +4,10 @@ from typing import List, Union
 import requests
 import traceback
 
+from app.TextFormatter import TextFormatter
 from app.exceptions import NewsSourceException
 from app.news_types import NewsAppConfig, NewsArticle, NewsResponse
 from app.text_parsers import (
-    format_date,
     parse_date_from_text,
     parse_domain,
 )
@@ -15,7 +15,7 @@ from app.XmlFeedParser import XmlFeedParser
 
 
 class NewsFeed:
-    date_time_format: str
+    formatter: TextFormatter
     news_sources: list[str]
     articles: list[NewsArticle]
 
@@ -24,7 +24,7 @@ class NewsFeed:
         config: NewsAppConfig,
     ):
         self.news_sources = config["news_sources"]
-        self.date_time_format = config["date_time_format"]
+        self.formatter = TextFormatter(date_time_format=config["date_time_format"])
         self.articles = []
 
     def get_latest_articles(self, limit: Union[int, None] = None) -> List[NewsArticle]:
@@ -77,13 +77,34 @@ class NewsFeed:
             case "newsapi.org":
                 return self.get_news_from_newsapi(f"{source}&pageSize={limit}")
             case "www.hs.fi" | "www.is.fi":
-                return self.get_news_from_sanomat(source, limit)
+                return self.get_news_from_rss_source_and_format(
+                    source=source, 
+                    limit=limit, 
+                    text_formatter=self.formatter.get_instance(
+                        name="sanomat",
+                        name_formatter=lambda name: name.split(" - ")[1]
+                    )
+                )
             case "feeds.yle.fi":
-                return self.get_news_from_yle(source, limit)
+                return self.get_news_from_rss_source_and_format(
+                    source=source, 
+                    limit=limit, 
+                    text_formatter=self.formatter.get_instance(
+                        name="yle",
+                        name_formatter=lambda name: name.split(" | ")[0]
+                    )
+                )
             case "feeds.kauppalehti.fi":
-                return self.get_news_from_kauppalehti(source, limit)
+                return self.get_news_from_rss_source_and_format(
+                        source=source, 
+                        limit=limit, 
+                        text_formatter=self.formatter.get_instance(
+                            name="kauppalehti",
+                            name_formatter=lambda name: name.split(" | ")[1]
+                        )
+                    )
             case _:
-                return self.get_news_from_template_source(source, limit)
+                return self.get_news_from_rss_source_and_format(source=source, limit=limit, text_formatter=self.formatter)
 
     def get_news_from_newsapi(self, source: str) -> NewsResponse:
         news_api_key = os.getenv("NEWSAPI_ORG_KEY")
@@ -97,46 +118,14 @@ class NewsFeed:
 
         for article in parsed["articles"]:
             date_time = parse_date_from_text(article["publishedAt"])
-            article["publishedAt"] = format_date(date_time, self.date_time_format) if date_time else ""
+            article["publishedAt"] = self.formatter.format_date(date_time) if date_time else ""
             article["publishedAtTimestamp"] = date_time.timestamp() if date_time else 0
         return parsed
 
-    def get_news_from_sanomat(self, source: str, limit: int) -> NewsResponse:
+    def get_news_from_rss_source_and_format(self, source: str, limit: int, text_formatter: TextFormatter) -> NewsResponse:
         response_text = self.get_raw_response_from_source(source)
-        xml_feed_parser = XmlFeedParser(date_time_format=self.date_time_format)
+        xml_feed_parser = XmlFeedParser(text_formatter=text_formatter, limit=limit)
 
-        xml_feed_parser.limit = limit
-        xml_feed_parser.name_formatter = lambda name: name.split(" - ")[1]
-
-        parsed = xml_feed_parser.parse(response_text)
-        return parsed
-
-    def get_news_from_yle(self, source: str, limit: int) -> NewsResponse:
-        response_text = self.get_raw_response_from_source(source)
-        xml_feed_parser = XmlFeedParser(date_time_format=self.date_time_format)
-
-        xml_feed_parser.limit = limit
-        xml_feed_parser.name_formatter = lambda name: name.split(" | ")[0]
-
-        parsed = xml_feed_parser.parse(response_text)
-        return parsed
-
-    def get_news_from_kauppalehti(self, source: str, limit: int) -> NewsResponse:
-        response_text = self.get_raw_response_from_source(source)
-        xml_feed_parser = XmlFeedParser(date_time_format=self.date_time_format)
-
-        xml_feed_parser.limit = limit
-        xml_feed_parser.name_formatter = lambda name: name.split(" | ")[1]
-
-        parsed = xml_feed_parser.parse(response_text)
-        
-        return parsed
-    
-    def get_news_from_template_source(self, source: str, limit: int) -> NewsResponse:
-        response_text = self.get_raw_response_from_source(source)
-        xml_feed_parser = XmlFeedParser(date_time_format=self.date_time_format)
-
-        xml_feed_parser.limit = limit
         parsed = xml_feed_parser.parse(response_text)
         
         return parsed

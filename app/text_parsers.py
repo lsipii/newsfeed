@@ -26,11 +26,11 @@ def parse_date_from_text(date_text: str) -> Union[datetime, None]:
     return None
 
 
-def format_date(date: datetime, date_time_format: str) -> str:
+def format_date(date: datetime, date_time_format: str = "%d.%m.%Y %H:%M:%S") -> str:
     return date.strftime(date_time_format)
 
 
-def format_date_text(date_text: str, date_time_format: str) -> str:
+def format_date_text(date_text: str, date_time_format: str = "%d.%m.%Y %H:%M:%S") -> str:
     try:
         parsed_date = parse_date_from_text(date_text)
         if parsed_date is None:
