@@ -76,7 +76,7 @@ class NewsFeed:
         match domain:
             case "newsapi.org":
                 return self.get_news_from_newsapi(f"{source}&pageSize={limit}")
-            case "www.hs.fi" | "www.is.fi":
+            case "www.hs.fi" | "www.is.fi" | "www.aamulehti.fi":
                 return self.get_news_from_rss_source_and_format(
                     source=source, 
                     limit=limit, 

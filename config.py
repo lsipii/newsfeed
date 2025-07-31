@@ -4,7 +4,9 @@ news_sources = [
     "https://www.is.fi/rss/tuoreimmat.xml",
     "https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_UUTISET",
     "https://feeds.kauppalehti.fi/rss/main",
-    "https://www.tivi.fi/api/feed/v2/rss/tv",
+    "https://www.tivi.fi/api/feed/v2/rss/tv",   
+    "https://www.aamulehti.fi/rss/tuoreimmat.xml",
+    "https://www.savonsanomat.fi/feed/rss/",
 ]
 
 """
