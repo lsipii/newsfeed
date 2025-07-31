@@ -7,6 +7,11 @@ news_sources = [
     "https://www.tivi.fi/api/feed/v2/rss/tv",   
     "https://www.aamulehti.fi/rss/tuoreimmat.xml",
     "https://www.savonsanomat.fi/feed/rss/",
+    "https://wp.tekniikanmaailma.fi/feed/",
+    "https://www.iltalehti.fi/rss/uutiset.xml",
+    "https://www.mtvuutiset.fi/api/feed/rss/uutiset_uusimmat",
+    "https://www.pelaaja.fi/feed/",
+    "https://www.uusisuomi.fi/api/feed/v2/rss/us"
 ]
 
 """

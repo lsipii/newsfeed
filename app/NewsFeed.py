@@ -103,6 +103,15 @@ class NewsFeed:
                             name_formatter=lambda name: name.split(" | ")[1]
                         )
                     )
+            case "www.iltalehti.fi" | "www.mtvuutiset.fi":
+                return self.get_news_from_rss_source_and_format(
+                        source=source, 
+                        limit=limit, 
+                        text_formatter=self.formatter.get_instance(
+                            name="alma",
+                            name_formatter=lambda name: name.split(" ")[0]
+                        )
+                    )
             case _:
                 return self.get_news_from_rss_source_and_format(source=source, limit=limit, text_formatter=self.formatter)
 
