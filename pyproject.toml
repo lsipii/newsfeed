@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "newsfeed"
+version = "0.1.0"
+description = "Simple command line news aggregator"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "python-dotenv==1.0.1",
+    "requests==2.32.3",
+    "python-dateutil==2.9.0",
+    "blessed==1.20.0",
+    "nltk==3.9.1",
+    "libvoikko>=4.3,<5",
+]
+
+[project.scripts]
+newsfeed = "newsfeed:main"
+
+[tool.setuptools]
+py-modules = ["newsfeed", "config"]
