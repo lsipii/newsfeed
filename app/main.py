@@ -22,24 +22,43 @@ _HEADER_ROWS = 3
 _MIN_TERM_WIDTH_SPLIT = 72
 _GUTTER_COLS = 1
 
-# OSC 8 hyperlinks: one logical link per URL (full URI in OSC 8; truncate visible text only).
+# OSC 8 hyperlinks: full URI in the OSC payload; visible text may truncate with ``…``.
+# ST must be ESC \\ (ECMA-48). **tmux** often drops OSC 8 unless passthrough is enabled
+# in ``~/.tmux.conf`` (e.g. ``set -g allow-passthrough on`` and
+# ``set -as terminal-features ",*:hyperlinks"``; needs a recent tmux with OSC 8 support).
 _OSC8_START = "\033]8;;"
 _OSC8_ST = "\033\\"
 _OSC8_END = "\033]8;;\033\\"
 
-# Characters safe to leave unescaped inside OSC 8 URI field. ``;`` must be encoded — many
-# terminals (xterm.js historically) treat ``;`` as delimiters and truncate the real target,
-# so Ctrl+click falls back to the visible underlined text only.
-_OSC8_URI_SAFE = (
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "-._~:/?#[]@!$&'()*+,=%"
-)
+# VTE / iTerm2 keep URI payloads to ~2083 bytes (see Hyperlinks_in_Terminal_Emulators.md).
+_OSC8_MAX_URI_BYTES = 2080
 
 
 def _osc8_embed_uri(url: str) -> str:
+    """
+    URI field must be URI-encoded; only bytes 32–126 may appear raw (spec). Encode ``;`` so
+    OSC parsers don’t split the sequence; avoid blanket ``quote()`` so links stay shorter.
+    """
     if not url:
         return url
-    return quote(url, safe=_OSC8_URI_SAFE)
+    parts: List[str] = []
+    for ch in url:
+        o = ord(ch)
+        if ch == ";":
+            parts.append("%3B")
+        elif ch == "\\":
+            parts.append("%5C")
+        elif ch == " ":
+            parts.append("%20")
+        elif o < 32 or o > 126:
+            parts.append(quote(ch, safe=""))
+        else:
+            parts.append(ch)
+    return "".join(parts)
+
+
+def _line_has_osc8_hyperlink(line: str) -> bool:
+    return "\x1b]8;" in line
 
 
 # ANSI fallbacks when terminfo omits capabilities (move_xy / ceol / cds empty).
@@ -95,6 +114,15 @@ def _hyperlink(url: str, visible: str) -> str:
     return f"{_OSC8_START}{embedded}{_OSC8_ST}{visible}{_OSC8_END}"
 
 
+def _chunk_fixed_width(text: str, width: int) -> List[str]:
+    """Hard-wrap ``text`` to fixed character width (for plain URLs that exceed OSC limits)."""
+    if width <= 0:
+        return [text]
+    if not text:
+        return [""]
+    return [text[i : i + width] for i in range(0, len(text), width)]
+
+
 def _wrap_words_plain(text: str, width: int) -> List[str]:
     """Word-wrap plain text to fixed character width (no hyphenation)."""
     if width <= 0:
@@ -138,6 +166,11 @@ def _url_lines(_term: Terminal, url: str, width: int) -> List[str]:
     if not url:
         return []
     vis_plain = _clip(url, width)
+    embedded = _osc8_embed_uri(url)
+    if len(embedded.encode("utf-8")) > _OSC8_MAX_URI_BYTES:
+        # VTE ~2083-byte URI cap — plain wrapped lines so the full target is on-screen (OSC
+        # cannot carry it without truncation).
+        return _chunk_fixed_width(url, width)
     return [_hyperlink(url, vis_plain)]
 
 
@@ -299,39 +332,45 @@ def _paint_body_viewport(
         if layout.split and left is not None and right is not None:
             ll = left[idx] if idx < len(left) else ""
             rr = right[idx] if idx < len(right) else ""
+            ll_h = _line_has_osc8_hyperlink(ll)
+            rr_h = _line_has_osc8_hyperlink(rr)
             try:
                 sys.stdout.write(_term_move_xy(term, 0, y))
                 sys.stdout.write(_term_erase_line_full())
                 sys.stdout.write(ll)
-                if ceol:
-                    sys.stdout.write(ceol)
-                sys.stdout.write(normal)
+                if not ll_h:
+                    if ceol:
+                        sys.stdout.write(ceol)
+                    sys.stdout.write(normal)
                 sys.stdout.write(_term_move_xy(term, layout.right_x, y))
                 sys.stdout.write(_term_erase_to_eol(term))
                 sys.stdout.write(rr)
-                if ceol:
-                    sys.stdout.write(ceol)
-                sys.stdout.write(normal)
+                if not rr_h:
+                    if ceol:
+                        sys.stdout.write(ceol)
+                    sys.stdout.write(normal)
             except Exception:
                 sys.stdout.write(_term_move_xy(term, 0, y))
                 sys.stdout.write(_term_erase_line_full())
-                sys.stdout.write(ll + normal)
+                sys.stdout.write(ll + (normal if not ll_h else ""))
                 sys.stdout.write(_term_move_xy(term, layout.right_x, y))
                 sys.stdout.write(_term_erase_to_eol(term))
-                sys.stdout.write(rr + normal)
+                sys.stdout.write(rr + (normal if not rr_h else ""))
         else:
             line = single[idx] if single is not None and idx < len(single) else ""
+            line_h = _line_has_osc8_hyperlink(line)
             try:
                 sys.stdout.write(_term_move_xy(term, 0, y))
                 sys.stdout.write(_term_erase_line_full())
                 sys.stdout.write(line)
-                if ceol:
-                    sys.stdout.write(ceol)
-                sys.stdout.write(normal)
+                if not line_h:
+                    if ceol:
+                        sys.stdout.write(ceol)
+                    sys.stdout.write(normal)
             except Exception:
                 sys.stdout.write(_term_move_xy(term, 0, y))
                 sys.stdout.write(_term_erase_line_full())
-                sys.stdout.write(line + normal)
+                sys.stdout.write(line + (normal if not line_h else ""))
 
     below = _term_erase_below(term)
     try:

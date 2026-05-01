@@ -68,6 +68,18 @@ NEWSAPI_ORG_KEY=<key>
 
 If you don't want to use the News API, you can skip this step and the program will use the default news sources.
 
+## Terminal hyperlinks (OSC 8) and tmux
+
+Article URLs are emitted as **OSC 8** hyperlinks so Ctrl+click (or your terminal’s link action) can open the full URI even when the on-screen label is truncated. **tmux** sits between the app and the real terminal and may drop those sequences unless you enable passthrough and declare hyperlink support.
+
+Add to `~/.tmux.conf`:
+
+```tmux
+set -g allow-passthrough on
+set -as terminal-features ",*:hyperlinks"
+```
+
+Reload the config (`tmux source-file ~/.tmux.conf`) or restart tmux. You need a **recent tmux** (3.2+ for `allow-passthrough`; OSC 8 handling improved further in later releases). If links still fail, confirm the **outer** terminal supports OSC 8 (e.g. Windows Terminal, GNOME Terminal).
 
 # Usage
 
