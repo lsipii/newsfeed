@@ -22,7 +22,7 @@ dependencies = [
 newsfeed = "newsfeed:main"
 
 [tool.setuptools]
-py-modules = ["newsfeed", "config"]
+py-modules = ["newsfeed", "newsfeed_app_config"]
 
 [tool.setuptools.packages.find]
 include = ["app*", "newsfeed_config*"]

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from app.main import execute
-from config import load_app_config
+from newsfeed_app_config import load_app_config
 from dotenv import load_dotenv
 
 
