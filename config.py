@@ -11,6 +11,8 @@ from app.news_types import NewsAppConfig
 _TEMPLATE_FILE = "config.default.json"
 _USER_CONFIG_FILE = "config.json"
 _PACKAGED_CONFIG_PACKAGE = "newsfeed_config"
+# Written on first seed so we do not reuse ~/.config/newsfeed (etc.) created by another program.
+_CONFIG_DIR_MARKER_NAME = ".newsfeed-dir"
 
 REQUIRED_CONFIG_KEYS = (
     "news_sources",
@@ -66,6 +68,32 @@ def _resolve_config_json_path() -> Path:
     return _resolve_user_config_path()
 
 
+def _validate_config_parent_before_seed(config_path: Path) -> None:
+    """
+    Before creating config.json, ensure the parent directory is either new, empty, or already
+    claimed by this app (marker file and/or existing config.json). Refuse foreign directories
+    that happen to use the same path (e.g. ``~/.config/newsfeed`` on Linux).
+    """
+    parent = config_path.parent
+    if parent.exists() and not parent.is_dir():
+        raise ValueError(
+            f"Cannot create config at {config_path}: {parent} exists and is not a directory."
+        )
+    if config_path.exists():
+        return
+    if not parent.exists():
+        return
+    allowed = {_CONFIG_DIR_MARKER_NAME, _USER_CONFIG_FILE}
+    for entry in parent.iterdir():
+        if entry.name not in allowed:
+            raise ValueError(
+                f"Refusing to create {config_path.name} under {parent}: that directory already "
+                f"exists and contains {entry.name!r}, which is not from this application. "
+                "Remove or relocate those files, or set NEWSFEED_CONFIG_DIR to a dedicated empty "
+                "directory."
+            )
+
+
 def _resource_root():
     try:
         return resources.files(_PACKAGED_CONFIG_PACKAGE)
@@ -79,10 +107,17 @@ def _seed_config_if_missing(config_path: Path) -> None:
     """Create config.json by copying packaged config.default.json when missing."""
     if config_path.exists():
         return
+    _validate_config_parent_before_seed(config_path)
     root = _resource_root()
     template = root.joinpath(_TEMPLATE_FILE)
     text = template.read_text(encoding="utf-8")
     config_path.parent.mkdir(parents=True, exist_ok=True)
+    _validate_config_parent_before_seed(config_path)
+    marker = config_path.parent / _CONFIG_DIR_MARKER_NAME
+    if not marker.exists():
+        marker.write_text(
+            "Created by the newsfeed CLI to mark this directory.\n", encoding="utf-8"
+        )
     config_path.write_text(text, encoding="utf-8")
 
 
