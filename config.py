@@ -23,3 +23,8 @@ date_time_format = "%d.%m.%Y %H:%M:%S"
 How often the news feed is updated (in seconds).
 """
 news_update_frequency_in_seconds = 300
+
+"""
+Locales to enable for the news feed (e.g. "fi" for Finnish, "en" for English).
+"""
+locales = ["fi"]

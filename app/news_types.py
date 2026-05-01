@@ -28,4 +28,5 @@ class NewsAppConfig(TypedDict):
     news_sources: List[str]
     date_time_format: str
     news_update_frequency_in_seconds: int
+    locales: List[str]
 

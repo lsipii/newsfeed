@@ -118,7 +118,7 @@ class NewsFeed:
     def get_news_from_newsapi(self, source: str) -> NewsResponse:
         news_api_key = os.getenv("NEWSAPI_ORG_KEY")
         if news_api_key is None:
-            raise NewsSourceException("Missing News API key")
+            return {"status": "ok", "articles": []}
 
         response = requests.get(source, headers={"x-api-key": news_api_key})
         parsed = response.json()

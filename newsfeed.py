@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from app.main import execute
 from app.news_types import NewsAppConfig
-from config import news_sources, date_time_format, news_update_frequency_in_seconds
+from config import news_sources, date_time_format, news_update_frequency_in_seconds, locales
 from dotenv import load_dotenv
 
 def main():
@@ -10,7 +10,8 @@ def main():
     execute(config=NewsAppConfig(
         news_sources=news_sources,
         date_time_format=date_time_format,
-        news_update_frequency_in_seconds=news_update_frequency_in_seconds
+        news_update_frequency_in_seconds=news_update_frequency_in_seconds,
+        locales=locales
     ))
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from app.article_views import (
     ViewMode,
     build_sections,
     filter_articles_by_keyword,
+    set_enabled_locales,
 )
 from app.news_types import NewsAppConfig, NewsArticle
 
@@ -514,6 +515,7 @@ def refresh_display(
 
 
 def execute(config: NewsAppConfig) -> None:
+    set_enabled_locales(config.get("locales", ["fi"]))
     news_feed = NewsFeed(
         config=config,
     )

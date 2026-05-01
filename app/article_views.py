@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 import re
@@ -25,12 +26,23 @@ _MAX_PREFIX_INFLECTION_DELTA = 5
 
 _voikko_instance: Optional[Any] = None
 _voikko_init_failed = False
+_enabled_locales: list[str] = []
+
+
+def set_enabled_locales(locales: list[str]) -> None:
+    """Configure which locales are enabled. Should be called early by main app."""
+    global _enabled_locales
+    _enabled_locales = locales
 
 
 def _get_voikko() -> Optional[Any]:
-    """Lazy Voikko(fi) handle; None if lib/dict missing or NEWSFEED_DISABLE_VOIKKO is set."""
+    """Lazy Voikko(fi) handle; None if Finnish not enabled, lib/dict missing, or NEWSFEED_DISABLE_VOIKKO is set."""
     global _voikko_instance, _voikko_init_failed
     if _voikko_init_failed:
+        return None
+    # Only try to load Voikko if Finnish locale is enabled
+    if "fi" not in _enabled_locales:
+        _voikko_init_failed = True
         return None
     if os.environ.get("NEWSFEED_DISABLE_VOIKKO", "").strip().lower() in (
         "1",
@@ -44,9 +56,23 @@ def _get_voikko() -> Optional[Any]:
     try:
         import libvoikko
 
-        _voikko_instance = libvoikko.Voikko(language="fi")
+        # Probe the native C library BEFORE constructing Voikko.  If only the
+        # Python wrapper is installed but libvoikko.so.1 is absent, Voikko.__init__
+        # raises before setting self.__handle, and the partially-constructed object
+        # later crashes in __del__.  Opening the library here first avoids ever
+        # creating that broken object.
+        libvoikko.VoikkoLibrary.open()
+
+        instance = libvoikko.Voikko(language="fi")
+        _voikko_instance = instance
         return _voikko_instance
     except Exception:
+        logging.warning(
+            "Voikko native library (libvoikko.so.1) or Finnish morphology dictionary "
+            "not found — falling back to Snowball stemmer. "
+            "Install the libvoikko system package and voikko-fi dictionary to enable "
+            "accurate Finnish lemmatization."
+        )
         _voikko_init_failed = True
         return None
 
@@ -392,21 +418,51 @@ def _groups_by_iterative_clique_peeling(
     return groups
 
 
-def _format_group_label_words(words_sorted: List[str], k: int) -> str:
+def _build_stem_to_raw_word(titles: List[str]) -> dict[str, str]:
+    """
+    For each stem appearing in the given titles, pick the best display word:
+    Voikko BASEFORM if available (already the canonical nominative), otherwise
+    the shortest raw token that maps to the stem (nominative forms tend to be
+    the shortest inflection).
+    """
+    mapping: dict[str, str] = {}
+    for title in titles:
+        for raw in _raw_tokens(title):
+            for stem in _grouping_stems_for_raw_word(raw):
+                if stem in _STEM_STOPWORDS:
+                    continue
+                bf = _voikko_baseform(raw)
+                candidate = bf if bf is not None else raw
+                if stem not in mapping or len(candidate) < len(mapping[stem]):
+                    mapping[stem] = candidate
+    return mapping
+
+
+def _format_group_label_words(
+    words_sorted: List[str],
+    k: int,
+    stem_to_word: dict[str, str] | None = None,
+) -> str:
     """Join up to ``k`` stem tokens with middots (matches active shared-stems threshold)."""
     if not words_sorted or k <= 0:
         return "Related"
     take = words_sorted[: min(k, len(words_sorted))]
-    return " · ".join(w.capitalize() for w in take)
+    labels = [
+        (stem_to_word[w] if stem_to_word and w in stem_to_word else w).capitalize()
+        for w in take
+    ]
+    return " · ".join(labels)
 
 
 def _pairwise_match_heading(
     indices: List[int],
     article_tokens: dict[int, set[str]],
     min_shared_stems: int,
+    stem_to_word: dict[str, str] | None = None,
 ) -> str:
     """
     Section title from stem overlap: shows ``min_shared_stems`` matching stem labels when possible.
+    Uses original headline words (via stem_to_word) rather than raw stems as labels.
     """
     k = max(1, min_shared_stems)
     if len(indices) < 2:
@@ -414,7 +470,7 @@ def _pairwise_match_heading(
     sets = [article_tokens[i] for i in indices]
     common_all = _collapse_prefix_variants(set.intersection(*sets))
     if len(common_all) >= k:
-        return _format_group_label_words(sorted(common_all), k)
+        return _format_group_label_words(sorted(common_all), k, stem_to_word)
     best: set[str] = set()
     for a in range(len(indices)):
         for b in range(a + 1, len(indices)):
@@ -424,7 +480,7 @@ def _pairwise_match_heading(
             if len(inter) >= k and len(inter) > len(best):
                 best = inter
     if len(best) >= k:
-        return _format_group_label_words(sorted(best), k)
+        return _format_group_label_words(sorted(best), k, stem_to_word)
     return "Related"
 
 
@@ -506,6 +562,7 @@ def build_sections(
     article_tokens: dict[int, set[str]] = {
         i: _matching_stem_set(a["title"]) for i, a in enumerate(article_list)
     }
+    stem_to_word = _build_stem_to_raw_word([a["title"] for a in article_list])
 
     n = len(article_list)
     noisy = _overly_frequent_stems(article_tokens, n)
@@ -516,7 +573,7 @@ def build_sections(
     grouped_sections: List[ArticleSection] = []
     for idxs_sorted in group_indices:
         heading = _pairwise_match_heading(
-            idxs_sorted, trimmed, voikko_min_shared_stems
+            idxs_sorted, trimmed, voikko_min_shared_stems, stem_to_word
         )
         grouped_sections.append(
             ArticleSection(
