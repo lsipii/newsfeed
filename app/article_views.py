@@ -419,6 +419,34 @@ VIEW_LABELS: dict[ViewMode, str] = {
 }
 
 
+def filter_articles_by_keyword(
+    articles: List[NewsArticle], query: str
+) -> List[NewsArticle]:
+    """
+    Case-insensitive substring filter. Multiple whitespace-separated words require **all**
+    to appear somewhere in title, description, content, source name, or author (AND).
+    """
+    q = query.strip().lower()
+    if not q:
+        return list(articles)
+    tokens = [t for t in re.split(r"\s+", q) if t]
+    if not tokens:
+        return list(articles)
+
+    def haystack(a: NewsArticle) -> str:
+        src = a.get("source") or {}
+        parts = [
+            a.get("title") or "",
+            a.get("description") or "",
+            a.get("content") or "",
+            src.get("name") or "",
+            a.get("author") or "",
+        ]
+        return " ".join(parts).lower()
+
+    return [a for a in articles if all(tok in haystack(a) for tok in tokens)]
+
+
 def _newest_first(articles: List[NewsArticle]) -> List[NewsArticle]:
     return sorted(articles, key=lambda a: a["publishedAtTimestamp"], reverse=True)
 

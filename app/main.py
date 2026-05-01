@@ -12,6 +12,7 @@ from app.article_views import (
     ArticleSection,
     ViewMode,
     build_sections,
+    filter_articles_by_keyword,
 )
 from app.news_types import NewsAppConfig, NewsArticle
 
@@ -280,11 +281,18 @@ def _paint_header(
     view_mode: ViewMode,
     split_columns: bool,
     term_wide_enough_for_split: bool,
+    *,
+    search_query: str = "",
+    search_editing: bool = False,
+    search_buffer: str = "",
 ) -> None:
     """Single-row title + help (clipped) so body row math stays stable when viewport repaints."""
     tw = max(20, term.width or 80)
     label = VIEW_LABELS[view_mode]
     title_plain = f"Newsfeed — {label}"
+    sq = search_query.strip()
+    if sq:
+        title_plain += f" · filter: {_clip(sq, max(8, tw - len(title_plain) - 14))}"
     print(term.bold(_clip(title_plain, tw)))
     col_hint = ""
     if split_columns and term_wide_enough_for_split:
@@ -293,13 +301,24 @@ def _paint_header(
         col_hint = "columns (narrow)  "
     else:
         col_hint = "columns off  "
+    clear_hint = "(c) Clear filter  " if sq else ""
     help_plain = (
         "(1) All sources  (2) Top 3 per source  (3) Voikko groups  "
         "(v) Split columns  "
         f"{col_hint}"
+        "(/) Search  "
+        f"{clear_hint}"
         "(r) Refresh  (q) Quit  ·  ↑↓ / j k  PgUp/PgDn  Home/End  scroll"
     )
-    print(_secondary_style(term, _clip(help_plain, tw)))
+    if search_editing:
+        prompt_plain = f"Search (Enter apply · Esc cancel): {search_buffer}"
+        try:
+            prompt_line = term.bold(term.cyan(_clip(prompt_plain, tw)))
+        except Exception:
+            prompt_line = term.bold(_clip(prompt_plain, tw))
+        print(prompt_line)
+    else:
+        print(_secondary_style(term, _clip(help_plain, tw)))
     print()
 
 
@@ -389,10 +408,22 @@ def _paint_full(
     stick_bottom_ref: List[bool],
     split_columns: bool,
     term_wide_enough_for_split: bool,
+    *,
+    search_query: str = "",
+    search_editing: bool = False,
+    search_buffer: str = "",
 ) -> None:
     sys.stdout.write(term.clear())
     sys.stdout.flush()
-    _paint_header(term, view_mode, split_columns, term_wide_enough_for_split)
+    _paint_header(
+        term,
+        view_mode,
+        split_columns,
+        term_wide_enough_for_split,
+        search_query=search_query,
+        search_editing=search_editing,
+        search_buffer=search_buffer,
+    )
     sys.stdout.flush()
     _paint_body_viewport(term, layout, scroll_ref, stick_bottom_ref)
 
@@ -405,24 +436,34 @@ def refresh_display(
     stick_bottom_ref: List[bool],
     split_columns_ref: List[bool],
     paint_state: dict[str, Any],
+    search_state: dict[str, Any],
 ) -> None:
     if stick_bottom_ref[0]:
         scroll_ref[0] = 10**9
 
-    articles = news_feed.get_latest_articles()
+    query = str(search_state.get("query") or "").strip()
+    editing = bool(search_state.get("editing"))
+    buffer = str(search_state.get("buffer") or "")
+
+    raw_articles = news_feed.get_latest_articles()
+    aid = id(raw_articles)
+    articles = (
+        filter_articles_by_keyword(raw_articles, query) if query else raw_articles
+    )
     sections = build_sections(articles, view_mode)
     split_columns = split_columns_ref[0]
     layout = _build_body_layout(term, sections, split_columns)
 
     hw = (term.height or 0, term.width or 0)
-    aid = id(articles)
     tw = term.width or 80
     term_wide_enough_for_split = tw >= _MIN_TERM_WIDTH_SPLIT
+    search_digest = (query, editing, buffer)
     need_full = (
         paint_state.get("articles_ref") != aid
         or paint_state.get("view_mode") != view_mode
         or paint_state.get("hw") != hw
         or paint_state.get("split_columns") != split_columns
+        or paint_state.get("search_digest") != search_digest
     )
 
     if need_full:
@@ -430,6 +471,7 @@ def refresh_display(
         paint_state["view_mode"] = view_mode
         paint_state["hw"] = hw
         paint_state["split_columns"] = split_columns
+        paint_state["search_digest"] = search_digest
         _paint_full(
             term,
             layout,
@@ -438,6 +480,9 @@ def refresh_display(
             stick_bottom_ref,
             split_columns,
             term_wide_enough_for_split,
+            search_query=query,
+            search_editing=editing,
+            search_buffer=buffer,
         )
     else:
         _paint_body_viewport(term, layout, scroll_ref, stick_bottom_ref)
@@ -453,6 +498,7 @@ def execute(config: NewsAppConfig) -> None:
     stick_bottom_ref: List[bool] = [True]
     split_columns_ref: List[bool] = [False]
     paint_state: dict[str, Any] = {}
+    search_state: dict[str, Any] = {"query": "", "editing": False, "buffer": ""}
 
     def on_resize(*_args: object) -> None:
         refresh_display(
@@ -463,6 +509,7 @@ def execute(config: NewsAppConfig) -> None:
             stick_bottom_ref,
             split_columns_ref,
             paint_state,
+            search_state,
         )
 
     signal.signal(signal.SIGWINCH, on_resize)
@@ -482,6 +529,7 @@ def execute(config: NewsAppConfig) -> None:
             stick_bottom_ref,
             split_columns_ref,
             paint_state,
+            search_state,
         )
         last_poll = time.monotonic()
         interval = float(config["news_update_frequency_in_seconds"])
@@ -489,8 +537,98 @@ def execute(config: NewsAppConfig) -> None:
         while True:
             key = term.inkey(timeout=0.2)
 
+            if search_state["editing"]:
+                if not key:
+                    continue
+                if key.code == term.KEY_ESCAPE or key == "\x1b":
+                    search_state["editing"] = False
+                    search_state["buffer"] = ""
+                    refresh_display(
+                        term,
+                        news_feed,
+                        view_mode,
+                        scroll_ref,
+                        stick_bottom_ref,
+                        split_columns_ref,
+                        paint_state,
+                        search_state,
+                    )
+                    continue
+                if key.code == term.KEY_ENTER or key in ("\r", "\n"):
+                    search_state["query"] = search_state["buffer"].strip()
+                    search_state["editing"] = False
+                    search_state["buffer"] = ""
+                    scroll_ref[0] = 10**9
+                    stick_bottom_ref[0] = True
+                    refresh_display(
+                        term,
+                        news_feed,
+                        view_mode,
+                        scroll_ref,
+                        stick_bottom_ref,
+                        split_columns_ref,
+                        paint_state,
+                        search_state,
+                    )
+                    continue
+                if key.code == term.KEY_BACKSPACE or key in ("\x7f", "\b"):
+                    search_state["buffer"] = search_state["buffer"][:-1]
+                    refresh_display(
+                        term,
+                        news_feed,
+                        view_mode,
+                        scroll_ref,
+                        stick_bottom_ref,
+                        split_columns_ref,
+                        paint_state,
+                        search_state,
+                    )
+                    continue
+                one = str(key)
+                if len(one) == 1 and one.isprintable():
+                    search_state["buffer"] += one
+                    refresh_display(
+                        term,
+                        news_feed,
+                        view_mode,
+                        scroll_ref,
+                        stick_bottom_ref,
+                        split_columns_ref,
+                        paint_state,
+                        search_state,
+                    )
+                    continue
+                continue
+
             if key in ("q", "Q"):
                 break
+            elif key == "/":
+                search_state["editing"] = True
+                search_state["buffer"] = search_state["query"]
+                refresh_display(
+                    term,
+                    news_feed,
+                    view_mode,
+                    scroll_ref,
+                    stick_bottom_ref,
+                    split_columns_ref,
+                    paint_state,
+                    search_state,
+                )
+            elif key in ("c", "C") and search_state["query"]:
+                search_state["query"] = ""
+                scroll_ref[0] = 10**9
+                stick_bottom_ref[0] = True
+                refresh_display(
+                    term,
+                    news_feed,
+                    view_mode,
+                    scroll_ref,
+                    stick_bottom_ref,
+                    split_columns_ref,
+                    paint_state,
+                    search_state,
+                )
             elif key in ("v", "V"):
                 split_columns_ref[0] = not split_columns_ref[0]
                 refresh_display(
@@ -501,6 +639,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key == "1":
                 view_mode = "chronological"
@@ -514,6 +653,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key == "2":
                 view_mode = "per_source"
@@ -527,6 +667,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key == "3":
                 view_mode = "by_matching_words"
@@ -540,6 +681,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key in ("r", "R"):
                 news_feed.update()
@@ -551,6 +693,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
 
             elif key.code == term.KEY_UP or key == "k":
@@ -564,6 +707,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key.code == term.KEY_DOWN or key == "j":
                 scroll_ref[0] += 1
@@ -575,6 +719,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key.code == term.KEY_PGUP:
                 scroll_ref[0] -= _viewport_height(term)
@@ -587,6 +732,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key.code == term.KEY_PGDOWN:
                 scroll_ref[0] += _viewport_height(term)
@@ -598,6 +744,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key.code == term.KEY_HOME:
                 scroll_ref[0] = 0
@@ -610,6 +757,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
             elif key.code == term.KEY_END:
                 scroll_ref[0] = 10**9
@@ -622,6 +770,7 @@ def execute(config: NewsAppConfig) -> None:
                     stick_bottom_ref,
                     split_columns_ref,
                     paint_state,
+                    search_state,
                 )
 
             now = time.monotonic()
@@ -635,5 +784,6 @@ def execute(config: NewsAppConfig) -> None:
                         stick_bottom_ref,
                         split_columns_ref,
                         paint_state,
+                        search_state,
                     )
                 last_poll = now
