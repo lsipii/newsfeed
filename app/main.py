@@ -313,7 +313,7 @@ def _paint_header(
         "(g) Shared k  " if view_mode == "by_matching_words" else ""
     )
     help_plain = (
-        "(1) All sources  (2) Top 3 per source  (3) Voikko groups  "
+        "(1) All sources  (2) Top 3 per source  (3) Shared stems  "
         f"{g_hint}"
         "(v) Split columns  "
         f"{col_hint}"

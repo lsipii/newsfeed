@@ -492,7 +492,7 @@ class ArticleSection(TypedDict):
 VIEW_LABELS: dict[ViewMode, str] = {
     "chronological": "All sources (newest at bottom)",
     "per_source": "Top 3 per source",
-    "by_matching_words": "Shared stems — Voikko groups",
+    "by_matching_words": "Shared stems",
 }
 
 
