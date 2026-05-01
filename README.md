@@ -38,8 +38,22 @@ If you update this repo and want to reinstall the latest local code:
 
 ```bash
 uv tool uninstall newsfeed
-uv tool install .
+uv tool install --force .
 ```
+
+Use an **absolute path** to the clone if you are not sitting in the repo root (`uv tool install --force /home/you/src/newsfeed`).
+
+### Troubleshooting: `Missing required config keys` (date_time_format, locales, …)
+
+If the traceback shows **`Missing required config keys:`** and **does not** mention **`after merging with defaults`**, the `newsfeed` on your `PATH` is still an **old install** (before `config.json` was merged with `config.default.json`). Fix:
+
+```bash
+uv tool uninstall newsfeed
+cd /path/to/your/newsfeed
+uv tool install --force .
+```
+
+Then run `newsfeed` again. The project version in `pyproject.toml` is bumped when config behaviour changes; **`uv tool install --force`** picks up a fresh wheel from your clone.
 
 # Install dependencies (development)
 
@@ -84,10 +98,50 @@ export NEWSFEED_DISABLE_VOIKKO=1
 
 # News source configuration
 
-The sources are defined in the `config.py` file. You can add or remove sources from the list.
+**Template:** `newsfeed_config/config.default.json` is shipped in the package (edit only if you want to change the defaults committed for everyone).
 
-```python
-news_sources = ["https://example.com/rss", "https://example2.com/rss"]
+**Runtime config:** on each startup the app loads **`config.default.json`** (from the package), then overlays **`config.json`**. Any **primary key** you omit from `config.json` keeps the value from the default file—so you can keep a small file (for example only `news_sources`) and still get `date_time_format`, `locales`, etc. from defaults. Keys you **do** set in `config.json` replace the defaults entirely.
+
+The first time it runs, **`config.json` is created** by copying `config.default.json`; you can delete keys from it afterward if you prefer defaults for those fields. Reinstalling the `uv` tool does **not** remove your `config.json`.
+
+### Where `config.json` is stored
+
+**Local checkout (development)** — when you run from this repo (e.g. `uv run python newsfeed.py`) and `config.py` is **not** loaded from an installed wheel under `site-packages`:
+
+| | |
+|---|---|
+| **Path** | **`newsfeed_config/config.json`** — same folder as `config.default.json`, at the root of the repository. |
+| **Git** | Ignored (machine-local). Created automatically on first run if missing. |
+
+Example absolute path after cloning:
+
+```text
+/path/to/newsfeed/newsfeed_config/config.json
+```
+
+**Installed CLI** (`uv tool install …`) — the wheel lives under `site-packages`, so the app uses your **user config directory** instead:
+
+| OS | Typical path |
+|----|----------------|
+| Linux (XDG) | `~/.config/newsfeed/config.json`, or `$XDG_CONFIG_HOME/newsfeed/config.json` if set |
+| macOS | `~/Library/Application Support/newsfeed/config.json` |
+| Windows | `%LOCALAPPDATA%\newsfeed\config.json` |
+
+Paths follow [platformdirs](https://pypi.org/project/platformdirs/) (`user_config_dir("newsfeed")`).
+
+**Custom directory** — set **`NEWSFEED_CONFIG_DIR`** or **`NEWSFEED_CONFIG`** to a folder. The app reads **`{that folder}/config.json`** (seeded from the template on first run if missing).
+
+You can set either env variable in a `.env` file (the CLI loads dotenv on startup).
+
+You can add or remove sources by editing `news_sources` in **`config.json`**. Omit other keys to keep using the packaged defaults for those settings.
+
+```json
+{
+	"news_sources": [
+		"https://example.com/rss",
+		"https://example2.com/rss"
+	]
+}
 ```
 
 Adding new sources wont probably work out of the box, as the program is designed to work with the default sources. You can modify the `NewsFeed` class to adapt it to the new sources. The news parsing method is classified using the sources domain name.
@@ -108,16 +162,20 @@ If you don't want to use the News API, you can skip this step and the program wi
 
 ## Locale configuration
 
-The `locales` setting in `config.py` controls which language-specific features are enabled. By default, Finnish (`"fi"`) is enabled.
+The `locales` setting in JSON config controls which language-specific features are enabled. By default, Finnish (`"fi"`) is enabled.
 
-```python
-locales = ["fi"]  # Enable Finnish-specific processing (Voikko, etc.)
+```json
+{
+	"locales": ["fi"]
+}
 ```
 
 When Finnish is enabled, the app will attempt to load **Voikko** for accurate Finnish lemmatization in stem-based article grouping. If you only want English news or don't have Finnish morphology data installed, you can disable it:
 
-```python
-locales = []  # Disable all language-specific features; use Snowball stemmer only
+```json
+{
+	"locales": []
+}
 ```
 
 ## Terminal hyperlinks (OSC 8) and tmux

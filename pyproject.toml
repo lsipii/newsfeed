@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "newsfeed"
-version = "0.1.0"
+version = "0.2.0"
 description = "Simple command line news aggregator"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "platformdirs>=4,<5",
     "python-dotenv==1.0.1",
     "requests==2.32.3",
     "python-dateutil==2.9.0",
@@ -24,4 +25,7 @@ newsfeed = "newsfeed:main"
 py-modules = ["newsfeed", "config"]
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["app*", "newsfeed_config*"]
+
+[tool.setuptools.package-data]
+newsfeed_config = ["config.default.json"]
