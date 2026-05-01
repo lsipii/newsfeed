@@ -84,6 +84,12 @@ def _validate_config_parent_before_seed(config_path: Path) -> None:
         return
     if not parent.exists():
         return
+    # Source checkout: config lives next to ``__init__.py`` and ``config.default.json`` in
+    # ``newsfeed_config/``. Those files are expected — only ~/.config-style dirs need the
+    # strict foreign-entry check below.
+    repo_pkg = _repo_newsfeed_config_if_writable()
+    if repo_pkg is not None and parent.resolve() == repo_pkg.resolve():
+        return
     allowed = {_CONFIG_DIR_MARKER_NAME, _USER_CONFIG_FILE, _UI_STATE_FILE}
     for entry in parent.iterdir():
         if entry.name not in allowed:

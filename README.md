@@ -43,6 +43,20 @@ uv tool install --force .
 
 Use an **absolute path** to the clone if you are not sitting in the repo root (`uv tool install --force /home/you/src/newsfeed`).
 
+### Editable install (development)
+
+A normal `uv tool install` / `make reinstall` **copies a built wheel** into `~/.local/share/uv/tools/`. You must **reinstall after every change** to the code, or you still run the old copy. The **`make reinstall`** and **`make uninstall`** targets also **delete** `$(uv tool dir)/newsfeed` so no files from a previous install remain.
+
+To run **this clone** directly (no reinstall after edits), use an **editable** tool install from the repo root:
+
+```bash
+uv tool install --force --editable .
+# or: make install-editable
+# full refresh: make reinstall-editable
+```
+
+That is not the same workflow as `make reinstall`; use **one** style for day-to-day work: editable while developing, or snapshot `reinstall` when you want a self-contained install.
+
 ### Troubleshooting: `Missing required config keys` (date_time_format, locales, …)
 
 If the traceback shows **`Missing required config keys:`** and **does not** mention **`after merging with defaults`**, the `newsfeed` on your `PATH` is still an **old install** (before `config.json` was merged with `config.default.json`). Fix:

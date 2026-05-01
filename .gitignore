@@ -133,6 +133,7 @@ venv.bak/
 # Mutable config copied from config.default.json on first run (project-local / dev)
 newsfeed_config/config.json
 newsfeed_config/ui_state.json
+newsfeed_config/.newsfeed-dir
 
 # Local test HOME used when exercising config paths (do not commit)
 .tmp_home/
