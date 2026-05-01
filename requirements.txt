@@ -1,7 +1,0 @@
-python-dotenv==1.0.1
-requests==2.32.3
-python-dateutil==2.9.0
-blessed==1.20.0
-nltk==3.9.1
-# Finnish morphology — needs OS Voikko + fi dict (e.g. Debian: voikko-fi libvoikko-dev).
-libvoikko>=4.3,<5
