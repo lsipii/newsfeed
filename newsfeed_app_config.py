@@ -10,6 +10,7 @@ from app.news_types import NewsAppConfig
 
 _TEMPLATE_FILE = "config.default.json"
 _USER_CONFIG_FILE = "config.json"
+_UI_STATE_FILE = "ui_state.json"
 _PACKAGED_CONFIG_PACKAGE = "newsfeed_config"
 # Written on first seed so we do not reuse ~/.config/newsfeed (etc.) created by another program.
 _CONFIG_DIR_MARKER_NAME = ".newsfeed-dir"
@@ -83,7 +84,7 @@ def _validate_config_parent_before_seed(config_path: Path) -> None:
         return
     if not parent.exists():
         return
-    allowed = {_CONFIG_DIR_MARKER_NAME, _USER_CONFIG_FILE}
+    allowed = {_CONFIG_DIR_MARKER_NAME, _USER_CONFIG_FILE, _UI_STATE_FILE}
     for entry in parent.iterdir():
         if entry.name not in allowed:
             raise ValueError(

@@ -16,6 +16,7 @@ from app.article_views import (
     set_enabled_locales,
 )
 from app.news_types import NewsAppConfig, NewsArticle
+from app.ui_state import load_ui_state, save_ui_state, ui_state_file_path
 
 # Fixed chrome height: title, shortcuts, blank line before scroll region
 _HEADER_ROWS = 3
@@ -520,19 +521,43 @@ def execute(config: NewsAppConfig) -> None:
         config=config,
     )
     term = Terminal()
-    view_mode: ViewMode = "chronological"
+    saved_ui = load_ui_state()
+    _vm = saved_ui.get("view_mode")
+    _initial_vm: ViewMode = (
+        _vm
+        if _vm in ("chronological", "per_source", "by_matching_words")
+        else "chronological"
+    )
+    view_mode_ref: List[ViewMode] = [_initial_vm]
     scroll_ref: List[int] = [10**9]
     stick_bottom_ref: List[bool] = [True]
-    split_columns_ref: List[bool] = [False]
+    split_columns_ref: List[bool] = (
+        [bool(saved_ui["split_columns"])]
+        if "split_columns" in saved_ui
+        else [False]
+    )
     paint_state: dict[str, Any] = {}
     search_state: dict[str, Any] = {"query": "", "editing": False, "buffer": ""}
-    voikko_min_shared_ref: List[int] = [2]
+    voikko_min_shared_ref: List[int] = (
+        [int(saved_ui["voikko_min_shared_k"])]
+        if "voikko_min_shared_k" in saved_ui
+        else [2]
+    )
+
+    def persist_ui_state() -> None:
+        save_ui_state(
+            {
+                "view_mode": view_mode_ref[0],
+                "split_columns": split_columns_ref[0],
+                "voikko_min_shared_k": voikko_min_shared_ref[0],
+            }
+        )
 
     def on_resize(*_args: object) -> None:
         refresh_display(
             term,
             news_feed,
-            view_mode,
+            view_mode_ref[0],
             scroll_ref,
             stick_bottom_ref,
             split_columns_ref,
@@ -544,6 +569,7 @@ def execute(config: NewsAppConfig) -> None:
     signal.signal(signal.SIGWINCH, on_resize)
 
     def on_sigint(_sig: object, _frame: object) -> None:
+        persist_ui_state()
         sys.exit(0)
 
     signal.signal(signal.SIGINT, on_sigint)
@@ -553,7 +579,7 @@ def execute(config: NewsAppConfig) -> None:
         refresh_display(
             term,
             news_feed,
-            view_mode,
+            view_mode_ref[0],
             scroll_ref,
             stick_bottom_ref,
             split_columns_ref,
@@ -561,6 +587,8 @@ def execute(config: NewsAppConfig) -> None:
             search_state,
             voikko_min_shared_ref,
         )
+        if not ui_state_file_path().exists():
+            persist_ui_state()
         last_poll = time.monotonic()
         interval = float(config["news_update_frequency_in_seconds"])
 
@@ -579,7 +607,7 @@ def execute(config: NewsAppConfig) -> None:
                     refresh_display(
                         term,
                         news_feed,
-                        view_mode,
+                        view_mode_ref[0],
                         scroll_ref,
                         stick_bottom_ref,
                         split_columns_ref,
@@ -597,7 +625,7 @@ def execute(config: NewsAppConfig) -> None:
                     refresh_display(
                         term,
                         news_feed,
-                        view_mode,
+                        view_mode_ref[0],
                         scroll_ref,
                         stick_bottom_ref,
                         split_columns_ref,
@@ -611,7 +639,7 @@ def execute(config: NewsAppConfig) -> None:
                     refresh_display(
                         term,
                         news_feed,
-                        view_mode,
+                        view_mode_ref[0],
                         scroll_ref,
                         stick_bottom_ref,
                         split_columns_ref,
@@ -626,7 +654,7 @@ def execute(config: NewsAppConfig) -> None:
                     refresh_display(
                         term,
                         news_feed,
-                        view_mode,
+                        view_mode_ref[0],
                         scroll_ref,
                         stick_bottom_ref,
                         split_columns_ref,
@@ -645,7 +673,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -660,7 +688,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -670,10 +698,11 @@ def execute(config: NewsAppConfig) -> None:
                 )
             elif key in ("v", "V"):
                 split_columns_ref[0] = not split_columns_ref[0]
+                persist_ui_state()
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -682,13 +711,14 @@ def execute(config: NewsAppConfig) -> None:
                     voikko_min_shared_ref,
                 )
             elif key == "1":
-                view_mode = "chronological"
+                view_mode_ref[0] = "chronological"
                 scroll_ref[0] = 10**9
                 stick_bottom_ref[0] = True
+                persist_ui_state()
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -697,13 +727,14 @@ def execute(config: NewsAppConfig) -> None:
                     voikko_min_shared_ref,
                 )
             elif key == "2":
-                view_mode = "per_source"
+                view_mode_ref[0] = "per_source"
                 scroll_ref[0] = 10**9
                 stick_bottom_ref[0] = True
+                persist_ui_state()
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -712,13 +743,14 @@ def execute(config: NewsAppConfig) -> None:
                     voikko_min_shared_ref,
                 )
             elif key == "3":
-                view_mode = "by_matching_words"
+                view_mode_ref[0] = "by_matching_words"
                 scroll_ref[0] = 10**9
                 stick_bottom_ref[0] = True
+                persist_ui_state()
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -737,10 +769,11 @@ def execute(config: NewsAppConfig) -> None:
                 ]
                 scroll_ref[0] = 10**9
                 stick_bottom_ref[0] = True
+                persist_ui_state()
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -753,7 +786,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -768,7 +801,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -781,7 +814,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -795,7 +828,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -808,7 +841,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -822,7 +855,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -836,7 +869,7 @@ def execute(config: NewsAppConfig) -> None:
                 refresh_display(
                     term,
                     news_feed,
-                    view_mode,
+                    view_mode_ref[0],
                     scroll_ref,
                     stick_bottom_ref,
                     split_columns_ref,
@@ -851,7 +884,7 @@ def execute(config: NewsAppConfig) -> None:
                     refresh_display(
                         term,
                         news_feed,
-                        view_mode,
+                        view_mode_ref[0],
                         scroll_ref,
                         stick_bottom_ref,
                         split_columns_ref,
@@ -860,3 +893,6 @@ def execute(config: NewsAppConfig) -> None:
                         voikko_min_shared_ref,
                     )
                 last_poll = now
+
+        persist_ui_state()
+
