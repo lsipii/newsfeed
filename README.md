@@ -4,10 +4,47 @@ Simple command line news aggregator
 # Requirements
 - Python 3.10 or higher
 
-# Install dependencies
+# Install (recommended: uv)
+
+This project is packaged with `pyproject.toml` and exposes a CLI command named `newsfeed`.
+The easiest way to install it without touching system Python is `uv tool install`, which creates an isolated environment automatically.
+
+1. Install `uv` (if not installed):
 
 ```bash
-python -m pip install .
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Ensure your local bin directory is on `PATH` (usually `~/.local/bin`):
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+3. Install `newsfeed` from this repository:
+
+```bash
+uv tool install .
+```
+
+4. Run it:
+
+```bash
+newsfeed
+```
+
+If you update this repo and want to reinstall the latest local code:
+
+```bash
+uv tool uninstall newsfeed
+uv tool install .
+```
+
+# Install dependencies (development)
+
+```bash
+uv sync
 ```
 
 ## Voikko (Finnish morphology)
@@ -35,7 +72,8 @@ brew install voikko libvoikko
 After installing system packages, reinstall or verify the Python binding:
 
 ```bash
-python -m pip install .
+uv tool uninstall newsfeed
+uv tool install .
 ```
 
 To **force** the app not to use Voikko (Snowball-only grouping):
@@ -98,7 +136,7 @@ Reload the config (`tmux source-file ~/.tmux.conf`) or restart tmux. You need a 
 # Usage
 
 ```bash
-python newsfeed.py
-# or after installation:
 newsfeed
+# local checkout without tool install:
+uv run python newsfeed.py
 ```

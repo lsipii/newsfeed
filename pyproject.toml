@@ -22,3 +22,6 @@ newsfeed = "newsfeed:main"
 
 [tool.setuptools]
 py-modules = ["newsfeed", "config"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
