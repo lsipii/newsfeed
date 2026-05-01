@@ -18,7 +18,8 @@ ViewMode = Literal["chronological", "per_source", "by_matching_words"]
 _MIN_TOKEN_LEN = 4
 # Drop stems that appear in too many headlines before linking (reduces generic bridges).
 _MAX_STEM_DOC_FRACTION = 0.22
-_MIN_SHARED_STEMS_LINK = 2
+# Default minimum shared stems for an edge in Voikko grouping (mode 3); user-tunable in UI.
+_DEFAULT_MIN_SHARED_STEMS_LINK = 2
 # Drop longer stem if it only extends a shorter one in the same raw word (seuraa→seura).
 _MAX_PREFIX_INFLECTION_DELTA = 5
 
@@ -314,15 +315,22 @@ def _trim_tokens_for_linking(
 
 
 def _adjacency_link_trimmed(
-    trimmed: Dict[int, Set[str]], n: int
+    trimmed: Dict[int, Set[str]], n: int, min_shared_stems: int
 ) -> Dict[int, Set[int]]:
+    """
+    Edge between headlines i,j iff ``|trimmed[i] ∩ trimmed[j]| >= k`` (pairwise shared stems).
+
+    That is the \"group match\" rule: two articles link only if they share at least ``k``
+    Voikko/Snowball-normalized stem buckets after noisy-term removal.
+    """
+    k = max(1, min_shared_stems)
     adj: Dict[int, Set[int]] = {i: set() for i in range(n)}
     for i in range(n):
         ti = trimmed[i]
-        if len(ti) < _MIN_SHARED_STEMS_LINK:
+        if len(ti) < k:
             continue
         for j in range(i + 1, n):
-            if len(ti & trimmed[j]) >= _MIN_SHARED_STEMS_LINK:
+            if len(ti & trimmed[j]) >= k:
                 adj[i].add(j)
                 adj[j].add(i)
     return adj
@@ -384,26 +392,39 @@ def _groups_by_iterative_clique_peeling(
     return groups
 
 
-def _pairwise_match_heading(indices: List[int], article_tokens: dict[int, set[str]]) -> str:
-    """Title from shared tokens: prefer words common to every headline, else strongest pairwise overlap."""
+def _format_group_label_words(words_sorted: List[str], k: int) -> str:
+    """Join up to ``k`` stem tokens with middots (matches active shared-stems threshold)."""
+    if not words_sorted or k <= 0:
+        return "Related"
+    take = words_sorted[: min(k, len(words_sorted))]
+    return " · ".join(w.capitalize() for w in take)
+
+
+def _pairwise_match_heading(
+    indices: List[int],
+    article_tokens: dict[int, set[str]],
+    min_shared_stems: int,
+) -> str:
+    """
+    Section title from stem overlap: shows ``min_shared_stems`` matching stem labels when possible.
+    """
+    k = max(1, min_shared_stems)
     if len(indices) < 2:
         return "Related"
     sets = [article_tokens[i] for i in indices]
     common_all = _collapse_prefix_variants(set.intersection(*sets))
-    if len(common_all) >= 2:
-        w1, w2 = sorted(common_all)[:2]
-        return f"{w1.capitalize()} · {w2.capitalize()}"
+    if len(common_all) >= k:
+        return _format_group_label_words(sorted(common_all), k)
     best: set[str] = set()
     for a in range(len(indices)):
         for b in range(a + 1, len(indices)):
             inter = _collapse_prefix_variants(
                 article_tokens[indices[a]] & article_tokens[indices[b]]
             )
-            if len(inter) >= 2 and len(inter) > len(best):
+            if len(inter) >= k and len(inter) > len(best):
                 best = inter
-    if len(best) >= 2:
-        w1, w2 = sorted(best)[:2]
-        return f"{w1.capitalize()} · {w2.capitalize()}"
+    if len(best) >= k:
+        return _format_group_label_words(sorted(best), k)
     return "Related"
 
 
@@ -415,7 +436,7 @@ class ArticleSection(TypedDict):
 VIEW_LABELS: dict[ViewMode, str] = {
     "chronological": "All sources (newest at bottom)",
     "per_source": "Top 3 per source",
-    "by_matching_words": "Stem overlap (Voikko + cliques)",
+    "by_matching_words": "Shared stems — Voikko groups",
 }
 
 
@@ -460,6 +481,7 @@ def build_sections(
     articles: List[NewsArticle],
     mode: ViewMode,
     per_source_limit: int = 3,
+    voikko_min_shared_stems: int = _DEFAULT_MIN_SHARED_STEMS_LINK,
 ) -> List[ArticleSection]:
     if not articles:
         return [ArticleSection(heading=None, articles=[])]
@@ -478,8 +500,8 @@ def build_sections(
             sections.append(ArticleSection(heading=name, articles=_oldest_first(pick)))
         return sections
 
-    # by_matching_words: largest maximal cliques (not connected components) on a graph
-    # where edges need ≥2 shared *infrequent* stems — kills long transitive false chains.
+    # by_matching_words: maximal cliques on a graph whose edges mean ≥k pairwise shared stems
+    # (after dropping overly frequent stems). Cliques reject long chains that aren't dense.
     article_list = list(articles)
     article_tokens: dict[int, set[str]] = {
         i: _matching_stem_set(a["title"]) for i, a in enumerate(article_list)
@@ -488,12 +510,14 @@ def build_sections(
     n = len(article_list)
     noisy = _overly_frequent_stems(article_tokens, n)
     trimmed = _trim_tokens_for_linking(article_tokens, n, noisy)
-    adj = _adjacency_link_trimmed(trimmed, n)
+    adj = _adjacency_link_trimmed(trimmed, n, voikko_min_shared_stems)
     group_indices = _groups_by_iterative_clique_peeling(adj, n)
 
     grouped_sections: List[ArticleSection] = []
     for idxs_sorted in group_indices:
-        heading = _pairwise_match_heading(idxs_sorted, trimmed)
+        heading = _pairwise_match_heading(
+            idxs_sorted, trimmed, voikko_min_shared_stems
+        )
         grouped_sections.append(
             ArticleSection(
                 heading=heading,

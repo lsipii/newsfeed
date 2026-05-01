@@ -23,6 +23,9 @@ _HEADER_ROWS = 3
 _MIN_TERM_WIDTH_SPLIT = 72
 _GUTTER_COLS = 1
 
+# Voikko view (mode 3): min pairwise shared stem buckets for a link — cycle (g): 2→3→4→1→2…
+_VOIKKO_SHARED_CYCLE = (2, 3, 4, 1)
+
 # OSC 8 hyperlinks: full URI in the OSC payload; visible text may truncate with ``…``.
 # ST must be ESC \\ (ECMA-48). **tmux** often drops OSC 8 unless passthrough is enabled
 # in ``~/.tmux.conf`` (e.g. ``set -g allow-passthrough on`` and
@@ -285,11 +288,14 @@ def _paint_header(
     search_query: str = "",
     search_editing: bool = False,
     search_buffer: str = "",
+    voikko_shared_k: int = 2,
 ) -> None:
     """Single-row title + help (clipped) so body row math stays stable when viewport repaints."""
     tw = max(20, term.width or 80)
     label = VIEW_LABELS[view_mode]
     title_plain = f"Newsfeed — {label}"
+    if view_mode == "by_matching_words":
+        title_plain += f" · shared≥{voikko_shared_k}"
     sq = search_query.strip()
     if sq:
         title_plain += f" · filter: {_clip(sq, max(8, tw - len(title_plain) - 14))}"
@@ -302,8 +308,12 @@ def _paint_header(
     else:
         col_hint = "columns off  "
     clear_hint = "(c) Clear filter  " if sq else ""
+    g_hint = (
+        "(g) Shared k  " if view_mode == "by_matching_words" else ""
+    )
     help_plain = (
         "(1) All sources  (2) Top 3 per source  (3) Voikko groups  "
+        f"{g_hint}"
         "(v) Split columns  "
         f"{col_hint}"
         "(/) Search  "
@@ -412,6 +422,7 @@ def _paint_full(
     search_query: str = "",
     search_editing: bool = False,
     search_buffer: str = "",
+    voikko_shared_k: int = 2,
 ) -> None:
     sys.stdout.write(term.clear())
     sys.stdout.flush()
@@ -423,6 +434,7 @@ def _paint_full(
         search_query=search_query,
         search_editing=search_editing,
         search_buffer=search_buffer,
+        voikko_shared_k=voikko_shared_k,
     )
     sys.stdout.flush()
     _paint_body_viewport(term, layout, scroll_ref, stick_bottom_ref)
@@ -437,6 +449,7 @@ def refresh_display(
     split_columns_ref: List[bool],
     paint_state: dict[str, Any],
     search_state: dict[str, Any],
+    voikko_min_shared_ref: List[int],
 ) -> None:
     if stick_bottom_ref[0]:
         scroll_ref[0] = 10**9
@@ -454,7 +467,11 @@ def refresh_display(
     else:
         articles = raw_articles
     filter_label = buffer.strip() if editing else query
-    sections = build_sections(articles, view_mode)
+    sections = build_sections(
+        articles,
+        view_mode,
+        voikko_min_shared_stems=voikko_min_shared_ref[0],
+    )
     split_columns = split_columns_ref[0]
     layout = _build_body_layout(term, sections, split_columns)
 
@@ -462,12 +479,14 @@ def refresh_display(
     tw = term.width or 80
     term_wide_enough_for_split = tw >= _MIN_TERM_WIDTH_SPLIT
     search_digest = (query, editing, buffer)
+    vk = voikko_min_shared_ref[0]
     need_full = (
         paint_state.get("articles_ref") != aid
         or paint_state.get("view_mode") != view_mode
         or paint_state.get("hw") != hw
         or paint_state.get("split_columns") != split_columns
         or paint_state.get("search_digest") != search_digest
+        or paint_state.get("voikko_shared_k") != vk
     )
 
     if need_full:
@@ -476,6 +495,7 @@ def refresh_display(
         paint_state["hw"] = hw
         paint_state["split_columns"] = split_columns
         paint_state["search_digest"] = search_digest
+        paint_state["voikko_shared_k"] = vk
         _paint_full(
             term,
             layout,
@@ -487,6 +507,7 @@ def refresh_display(
             search_query=filter_label,
             search_editing=editing,
             search_buffer=buffer,
+            voikko_shared_k=vk,
         )
     else:
         _paint_body_viewport(term, layout, scroll_ref, stick_bottom_ref)
@@ -503,6 +524,7 @@ def execute(config: NewsAppConfig) -> None:
     split_columns_ref: List[bool] = [False]
     paint_state: dict[str, Any] = {}
     search_state: dict[str, Any] = {"query": "", "editing": False, "buffer": ""}
+    voikko_min_shared_ref: List[int] = [2]
 
     def on_resize(*_args: object) -> None:
         refresh_display(
@@ -514,6 +536,7 @@ def execute(config: NewsAppConfig) -> None:
             split_columns_ref,
             paint_state,
             search_state,
+            voikko_min_shared_ref,
         )
 
     signal.signal(signal.SIGWINCH, on_resize)
@@ -534,6 +557,7 @@ def execute(config: NewsAppConfig) -> None:
             split_columns_ref,
             paint_state,
             search_state,
+            voikko_min_shared_ref,
         )
         last_poll = time.monotonic()
         interval = float(config["news_update_frequency_in_seconds"])
@@ -559,6 +583,7 @@ def execute(config: NewsAppConfig) -> None:
                         split_columns_ref,
                         paint_state,
                         search_state,
+                        voikko_min_shared_ref,
                     )
                     continue
                 if key.code == term.KEY_ENTER or key in ("\r", "\n"):
@@ -576,6 +601,7 @@ def execute(config: NewsAppConfig) -> None:
                         split_columns_ref,
                         paint_state,
                         search_state,
+                        voikko_min_shared_ref,
                     )
                     continue
                 if key.code == term.KEY_BACKSPACE or key in ("\x7f", "\b"):
@@ -589,6 +615,7 @@ def execute(config: NewsAppConfig) -> None:
                         split_columns_ref,
                         paint_state,
                         search_state,
+                        voikko_min_shared_ref,
                     )
                     continue
                 one = str(key)
@@ -603,6 +630,7 @@ def execute(config: NewsAppConfig) -> None:
                         split_columns_ref,
                         paint_state,
                         search_state,
+                        voikko_min_shared_ref,
                     )
                     continue
                 continue
@@ -621,6 +649,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key in ("c", "C") and search_state["query"]:
                 search_state["query"] = ""
@@ -635,6 +664,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key in ("v", "V"):
                 split_columns_ref[0] = not split_columns_ref[0]
@@ -647,6 +677,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key == "1":
                 view_mode = "chronological"
@@ -661,6 +692,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key == "2":
                 view_mode = "per_source"
@@ -675,6 +707,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key == "3":
                 view_mode = "by_matching_words"
@@ -689,6 +722,29 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
+                )
+            elif key in ("g", "G"):
+                cur = voikko_min_shared_ref[0]
+                try:
+                    idx = _VOIKKO_SHARED_CYCLE.index(cur)
+                except ValueError:
+                    idx = -1
+                voikko_min_shared_ref[0] = _VOIKKO_SHARED_CYCLE[
+                    (idx + 1) % len(_VOIKKO_SHARED_CYCLE)
+                ]
+                scroll_ref[0] = 10**9
+                stick_bottom_ref[0] = True
+                refresh_display(
+                    term,
+                    news_feed,
+                    view_mode,
+                    scroll_ref,
+                    stick_bottom_ref,
+                    split_columns_ref,
+                    paint_state,
+                    search_state,
+                    voikko_min_shared_ref,
                 )
             elif key in ("r", "R"):
                 news_feed.update()
@@ -701,6 +757,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
 
             elif key.code == term.KEY_UP or key == "k":
@@ -715,6 +772,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_DOWN or key == "j":
                 scroll_ref[0] += 1
@@ -727,6 +785,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_PGUP:
                 scroll_ref[0] -= _viewport_height(term)
@@ -740,6 +799,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_PGDOWN:
                 scroll_ref[0] += _viewport_height(term)
@@ -752,6 +812,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_HOME:
                 scroll_ref[0] = 0
@@ -765,6 +826,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_END:
                 scroll_ref[0] = 10**9
@@ -778,6 +840,7 @@ def execute(config: NewsAppConfig) -> None:
                     split_columns_ref,
                     paint_state,
                     search_state,
+                    voikko_min_shared_ref,
                 )
 
             now = time.monotonic()
@@ -792,5 +855,6 @@ def execute(config: NewsAppConfig) -> None:
                         split_columns_ref,
                         paint_state,
                         search_state,
+                        voikko_min_shared_ref,
                     )
                 last_poll = now
