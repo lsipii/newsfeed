@@ -311,7 +311,7 @@ def _paint_header(
         "(r) Refresh  (q) Quit  ·  ↑↓ / j k  PgUp/PgDn  Home/End  scroll"
     )
     if search_editing:
-        prompt_plain = f"Search (Enter apply · Esc cancel): {search_buffer}"
+        prompt_plain = f"Search (live · Enter apply · Esc clear): {search_buffer}"
         try:
             prompt_line = term.bold(term.cyan(_clip(prompt_plain, tw)))
         except Exception:
@@ -447,9 +447,13 @@ def refresh_display(
 
     raw_articles = news_feed.get_latest_articles()
     aid = id(raw_articles)
-    articles = (
-        filter_articles_by_keyword(raw_articles, query) if query else raw_articles
-    )
+    # While typing in search mode, filter by buffer live; otherwise use committed query.
+    effective_filter = buffer if editing else query
+    if effective_filter.strip():
+        articles = filter_articles_by_keyword(raw_articles, effective_filter)
+    else:
+        articles = raw_articles
+    filter_label = buffer.strip() if editing else query
     sections = build_sections(articles, view_mode)
     split_columns = split_columns_ref[0]
     layout = _build_body_layout(term, sections, split_columns)
@@ -480,7 +484,7 @@ def refresh_display(
             stick_bottom_ref,
             split_columns,
             term_wide_enough_for_split,
-            search_query=query,
+            search_query=filter_label,
             search_editing=editing,
             search_buffer=buffer,
         )
@@ -543,6 +547,9 @@ def execute(config: NewsAppConfig) -> None:
                 if key.code == term.KEY_ESCAPE or key == "\x1b":
                     search_state["editing"] = False
                     search_state["buffer"] = ""
+                    search_state["query"] = ""
+                    scroll_ref[0] = 10**9
+                    stick_bottom_ref[0] = True
                     refresh_display(
                         term,
                         news_feed,
