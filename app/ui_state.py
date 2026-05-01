@@ -60,6 +60,14 @@ def _parse_ui_state_dict(data: Dict[str, Any]) -> Dict[str, Any]:
         vm = vm.strip()
         if vm in _VIEW_MODES_FROZEN:
             out["view_mode"] = vm
+    # Cap must match ``_MAX_SPLIT_COLUMNS`` in ``app/main.py`` (currently 4).
+    cc = data.get("column_count")
+    if isinstance(cc, int) and cc >= 1:
+        out["column_count"] = min(cc, 4)
+    elif isinstance(cc, float) and cc.is_integer():
+        cci = int(cc)
+        if cci >= 1:
+            out["column_count"] = min(cci, 4)
     sc = data.get("split_columns")
     if isinstance(sc, bool):
         out["split_columns"] = sc
