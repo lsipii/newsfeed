@@ -10,6 +10,40 @@ Simple command line news aggregator
 python -m pip install -r requirements.txt
 ```
 
+## Voikko (Finnish morphology)
+
+Stem-based grouping (view **3**) uses [Voikko](https://voikko.puimula.org/) for Finnish **base forms** when available. The Python wheel **`libvoikko`** is listed in `requirements.txt`, but you also need the **native Voikko library** and a **Finnish morphology dictionary** on the system, or Voikko stays disabled and grouping falls back to Snowball stems only.
+
+**Debian / Ubuntu** (package names may vary slightly):
+
+```bash
+sudo apt install libvoikko1 voikko-fi
+```
+
+**Fedora**:
+
+```bash
+sudo dnf install libvoikko voikko-fi
+```
+
+**macOS** (Homebrew):
+
+```bash
+brew install voikko libvoikko
+```
+
+After installing system packages, reinstall or verify the Python binding:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+To **force** the app not to use Voikko (Snowball-only grouping):
+
+```bash
+export NEWSFEED_DISABLE_VOIKKO=1
+```
+
 # News source configuration
 
 The sources are defined in the `config.py` file. You can add or remove sources from the list.
