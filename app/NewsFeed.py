@@ -35,15 +35,22 @@ class NewsFeed:
             self.update(limit=limit)
         return self.articles[-limit:] if limit else self.articles
 
-    def update(self, limit: Union[int, None] = None) -> bool:
+    def update(
+        self,
+        limit: Union[int, None] = None,
+        *,
+        fetch_limit_per_source: int = 10,
+    ) -> bool:
         """
         @param limit: The number of latest articles to return. If None, all articles are returned.
+        @param fetch_limit_per_source: Items to request per feed URL (clamped to at least 10).
         @return: True if new articles found, False otherwise.
         """
+        fetch_n = max(10, int(fetch_limit_per_source))
         articles_from_all_sources = []
         for source in self.news_sources:
             try:
-                response = self.get_news_from_source(source, 10)
+                response = self.get_news_from_source(source, fetch_n)
                 for article in response["articles"]:
                     articles_from_all_sources.append(article)
             except Exception as e:

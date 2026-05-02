@@ -19,6 +19,9 @@ from newsfeed_app_config import (
 
 _UI_STATE_FILE = "ui_state.json"
 
+# Maximum articles per source in per-source view (UI input and disk state use this cap).
+MAX_PER_SOURCE_ARTICLES = 50
+
 _VIEW_MODES_FROZEN = frozenset(
     {"chronological", "per_source", "by_matching_words"}
 )
@@ -82,6 +85,13 @@ def _parse_ui_state_dict(data: Dict[str, Any]) -> Dict[str, Any]:
         vi = int(vk)
         if vi in _VOIKKO_SHARED_K_VALID:
             out["voikko_min_shared_k"] = vi
+    ps = data.get("per_source_article_limit")
+    if isinstance(ps, int) and ps >= 1:
+        out["per_source_article_limit"] = min(ps, MAX_PER_SOURCE_ARTICLES)
+    elif isinstance(ps, float) and ps.is_integer():
+        pi = int(ps)
+        if pi >= 1:
+            out["per_source_article_limit"] = min(pi, MAX_PER_SOURCE_ARTICLES)
     return out
 
 

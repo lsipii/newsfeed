@@ -19,7 +19,12 @@ from app.article_views import (
     set_enabled_locales,
 )
 from app.news_types import NewsAppConfig, NewsArticle
-from app.ui_state import load_ui_state, save_ui_state, ui_state_file_path
+from app.ui_state import (
+    MAX_PER_SOURCE_ARTICLES,
+    load_ui_state,
+    save_ui_state,
+    ui_state_file_path,
+)
 
 # Fixed chrome height: title, shortcuts, blank line before scroll region
 _HEADER_ROWS = 3
@@ -109,6 +114,18 @@ def _tty_dimensions(term: Terminal) -> Tuple[int, int]:
 
 def _tty_columns(term: Terminal) -> int:
     return _tty_dimensions(term)[0]
+
+
+def _clamp_per_source_limit_input(raw: str, fallback: int) -> int:
+    """Parse digits from per-source limit prompt; ``fallback`` if empty or invalid."""
+    s = raw.strip()
+    if not s:
+        return fallback
+    try:
+        v = int(s)
+    except ValueError:
+        return fallback
+    return max(1, min(v, MAX_PER_SOURCE_ARTICLES))
 
 
 # Voikko view (mode 3): min pairwise shared stem buckets for a link — cycle (g): 2→3→4→1→2…
@@ -369,7 +386,7 @@ def _between_section_split_candidates(
     """
     Values ``k`` where ``blocks[:k]`` ends on a section boundary (whole sources only).
 
-    Used so "Top 3 per source" keeps each source in one column stream — otherwise a
+    Used so per-source view keeps each source in one column stream — otherwise a
     line-balanced split can place a section heading (e.g. Pelaaja.fi) in the left
     column while the user expects it to start the right column after earlier sources.
     """
@@ -413,7 +430,7 @@ def _split_blocks_into_columns(
     When there are multiple sections, the split is snapped to **section boundaries**
     so each section's blocks stay in one column (important for per-source view).
 
-    **Top 3 per source + split:** use one block per source (``whole_section_one_block``)
+    **Per-source view + split:** use one block per source (``whole_section_one_block``)
     and split by **source count** (first ``ceil(N/2)`` sources on the left, rest on the
     right). Line-balanced splits could leave the last source on the left with only its
     heading visible at the bottom of the pane while its stories appeared beside the
@@ -672,11 +689,16 @@ def _paint_header(
     search_editing: bool = False,
     search_buffer: str = "",
     voikko_shared_k: int = 2,
+    per_source_limit: int = 3,
+    per_source_limit_editing: bool = False,
+    per_source_limit_buffer: str = "",
 ) -> None:
     """Single-row title + help (clipped) so body row math stays stable when viewport repaints."""
     tw = max(20, _tty_columns(term))
     label = VIEW_LABELS[view_mode]
     title_plain = f"Newsfeed — {label}"
+    if view_mode == "per_source":
+        title_plain += f" · top {per_source_limit} per source"
     if view_mode == "by_matching_words":
         title_plain += f" · shared≥{voikko_shared_k}"
     sq = search_query.strip()
@@ -687,12 +709,16 @@ def _paint_header(
     g_hint = (
         "(g) Shared k  " if view_mode == "by_matching_words" else ""
     )
+    n_hint = (
+        "(n) Per-source count  " if view_mode == "per_source" else ""
+    )
     cc = max(1, min(requested_columns, _MAX_SPLIT_COLUMNS))
     # Show 1/1 … 1/N (N = pane count) when cycling (v).
     col_frac = f"1/{cc}"
     help_plain = (
-        "(1) All sources  (2) Top 3 per source  (3) Shared stems  "
+        "(1) All sources  (2) Per source  (3) Shared stems  "
         f"{g_hint}"
+        f"{n_hint}"
         f"(v) columns {col_frac} (press v)  "
         "(/) Search  "
         f"{clear_hint}"
@@ -700,6 +726,16 @@ def _paint_header(
     )
     if search_editing:
         prompt_plain = f"Search (live · Enter apply · Esc clear): {search_buffer}"
+        try:
+            prompt_line = term.bold(term.cyan(_clip(prompt_plain, tw)))
+        except Exception:
+            prompt_line = term.bold(_clip(prompt_plain, tw))
+        print(prompt_line)
+    elif per_source_limit_editing:
+        hi = MAX_PER_SOURCE_ARTICLES
+        prompt_plain = (
+            f"Per-source articles 1–{hi} (Enter apply · Esc cancel): {per_source_limit_buffer}"
+        )
         try:
             prompt_line = term.bold(term.cyan(_clip(prompt_plain, tw)))
         except Exception:
@@ -841,6 +877,9 @@ def _paint_full(
     search_editing: bool = False,
     search_buffer: str = "",
     voikko_shared_k: int = 2,
+    per_source_limit: int = 3,
+    per_source_limit_editing: bool = False,
+    per_source_limit_buffer: str = "",
 ) -> None:
     sys.stdout.write(term.clear())
     sys.stdout.flush()
@@ -852,6 +891,9 @@ def _paint_full(
         search_editing=search_editing,
         search_buffer=search_buffer,
         voikko_shared_k=voikko_shared_k,
+        per_source_limit=per_source_limit,
+        per_source_limit_editing=per_source_limit_editing,
+        per_source_limit_buffer=per_source_limit_buffer,
     )
     sys.stdout.flush()
     _paint_body_viewport(term, layout, scroll_ref, stick_bottom_ref)
@@ -866,6 +908,8 @@ def refresh_display(
     column_count_ref: List[int],
     paint_state: dict[str, Any],
     search_state: dict[str, Any],
+    per_source_limit_ref: List[int],
+    per_source_limit_state: dict[str, Any],
     voikko_min_shared_ref: List[int],
 ) -> None:
     if stick_bottom_ref[0]:
@@ -887,6 +931,7 @@ def refresh_display(
     sections = build_sections(
         articles,
         view_mode,
+        per_source_limit=per_source_limit_ref[0],
         voikko_min_shared_stems=voikko_min_shared_ref[0],
     )
     column_count = max(1, min(column_count_ref[0], _MAX_SPLIT_COLUMNS))
@@ -898,6 +943,10 @@ def refresh_display(
     hw = (tw_h, tw_w)
     search_digest = (query, editing, buffer)
     vk = voikko_min_shared_ref[0]
+    ps_lim = per_source_limit_ref[0]
+    ps_edit = bool(per_source_limit_state.get("editing"))
+    ps_buf = str(per_source_limit_state.get("buffer") or "")
+    per_source_digest = (ps_lim, ps_edit, ps_buf)
     need_full = (
         paint_state.get("articles_ref") != aid
         or paint_state.get("view_mode") != view_mode
@@ -905,6 +954,7 @@ def refresh_display(
         or paint_state.get("column_count") != column_count
         or paint_state.get("search_digest") != search_digest
         or paint_state.get("voikko_shared_k") != vk
+        or paint_state.get("per_source_digest") != per_source_digest
     )
 
     if need_full:
@@ -914,6 +964,7 @@ def refresh_display(
         paint_state["column_count"] = column_count
         paint_state["search_digest"] = search_digest
         paint_state["voikko_shared_k"] = vk
+        paint_state["per_source_digest"] = per_source_digest
         _paint_full(
             term,
             layout,
@@ -925,6 +976,9 @@ def refresh_display(
             search_editing=editing,
             search_buffer=buffer,
             voikko_shared_k=vk,
+            per_source_limit=ps_lim,
+            per_source_limit_editing=ps_edit,
+            per_source_limit_buffer=ps_buf,
         )
     else:
         _paint_body_viewport(term, layout, scroll_ref, stick_bottom_ref)
@@ -963,12 +1017,29 @@ def execute(config: NewsAppConfig) -> None:
         else [2]
     )
 
+    def _initial_per_source_article_limit(saved: Dict[str, Any]) -> int:
+        v = saved.get("per_source_article_limit")
+        if isinstance(v, int) and v >= 1:
+            return min(v, MAX_PER_SOURCE_ARTICLES)
+        if isinstance(v, float) and v.is_integer():
+            vi = int(v)
+            if vi >= 1:
+                return min(vi, MAX_PER_SOURCE_ARTICLES)
+        return 3
+
+    per_source_limit_ref: List[int] = [_initial_per_source_article_limit(saved_ui)]
+    per_source_limit_state: dict[str, Any] = {"editing": False, "buffer": ""}
+
+    def _feed_fetch_per_source() -> int:
+        return max(10, per_source_limit_ref[0])
+
     def persist_ui_state() -> None:
         save_ui_state(
             {
                 "view_mode": view_mode_ref[0],
                 "column_count": column_count_ref[0],
                 "voikko_min_shared_k": voikko_min_shared_ref[0],
+                "per_source_article_limit": per_source_limit_ref[0],
             }
         )
 
@@ -982,6 +1053,8 @@ def execute(config: NewsAppConfig) -> None:
             column_count_ref,
             paint_state,
             search_state,
+            per_source_limit_ref,
+            per_source_limit_state,
             voikko_min_shared_ref,
         )
 
@@ -994,7 +1067,7 @@ def execute(config: NewsAppConfig) -> None:
     signal.signal(signal.SIGINT, on_sigint)
 
     with term.fullscreen(), term.cbreak(), term.hidden_cursor():
-        news_feed.update()
+        news_feed.update(fetch_limit_per_source=_feed_fetch_per_source())
         refresh_display(
             term,
             news_feed,
@@ -1004,6 +1077,8 @@ def execute(config: NewsAppConfig) -> None:
             column_count_ref,
             paint_state,
             search_state,
+            per_source_limit_ref,
+            per_source_limit_state,
             voikko_min_shared_ref,
         )
         if not ui_state_file_path().exists():
@@ -1032,6 +1107,8 @@ def execute(config: NewsAppConfig) -> None:
                         column_count_ref,
                         paint_state,
                         search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
                         voikko_min_shared_ref,
                     )
                     continue
@@ -1050,6 +1127,8 @@ def execute(config: NewsAppConfig) -> None:
                         column_count_ref,
                         paint_state,
                         search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
                         voikko_min_shared_ref,
                     )
                     continue
@@ -1064,6 +1143,8 @@ def execute(config: NewsAppConfig) -> None:
                         column_count_ref,
                         paint_state,
                         search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
                         voikko_min_shared_ref,
                     )
                     continue
@@ -1079,6 +1160,96 @@ def execute(config: NewsAppConfig) -> None:
                         column_count_ref,
                         paint_state,
                         search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
+                        voikko_min_shared_ref,
+                    )
+                    continue
+                continue
+
+            if per_source_limit_state["editing"]:
+                if not key:
+                    continue
+                if key.code == term.KEY_ESCAPE or key == "\x1b":
+                    per_source_limit_state["editing"] = False
+                    per_source_limit_state["buffer"] = ""
+                    scroll_ref[0] = 10**9
+                    stick_bottom_ref[0] = True
+                    refresh_display(
+                        term,
+                        news_feed,
+                        view_mode_ref[0],
+                        scroll_ref,
+                        stick_bottom_ref,
+                        column_count_ref,
+                        paint_state,
+                        search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
+                        voikko_min_shared_ref,
+                    )
+                    continue
+                if key.code == term.KEY_ENTER or key in ("\r", "\n"):
+                    prev = per_source_limit_ref[0]
+                    new_lim = _clamp_per_source_limit_input(
+                        per_source_limit_state["buffer"], prev
+                    )
+                    per_source_limit_ref[0] = new_lim
+                    per_source_limit_state["editing"] = False
+                    per_source_limit_state["buffer"] = ""
+                    scroll_ref[0] = 10**9
+                    stick_bottom_ref[0] = True
+                    if new_lim > prev:
+                        news_feed.update(fetch_limit_per_source=_feed_fetch_per_source())
+                    persist_ui_state()
+                    refresh_display(
+                        term,
+                        news_feed,
+                        view_mode_ref[0],
+                        scroll_ref,
+                        stick_bottom_ref,
+                        column_count_ref,
+                        paint_state,
+                        search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
+                        voikko_min_shared_ref,
+                    )
+                    continue
+                if key.code == term.KEY_BACKSPACE or key in ("\x7f", "\b"):
+                    per_source_limit_state["buffer"] = per_source_limit_state[
+                        "buffer"
+                    ][:-1]
+                    refresh_display(
+                        term,
+                        news_feed,
+                        view_mode_ref[0],
+                        scroll_ref,
+                        stick_bottom_ref,
+                        column_count_ref,
+                        paint_state,
+                        search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
+                        voikko_min_shared_ref,
+                    )
+                    continue
+                one = str(key)
+                if len(one) == 1 and one.isdigit():
+                    cap_digits = len(str(MAX_PER_SOURCE_ARTICLES))
+                    if len(per_source_limit_state["buffer"]) < cap_digits:
+                        per_source_limit_state["buffer"] += one
+                    refresh_display(
+                        term,
+                        news_feed,
+                        view_mode_ref[0],
+                        scroll_ref,
+                        stick_bottom_ref,
+                        column_count_ref,
+                        paint_state,
+                        search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
                         voikko_min_shared_ref,
                     )
                     continue
@@ -1087,6 +1258,8 @@ def execute(config: NewsAppConfig) -> None:
             if key in ("q", "Q"):
                 break
             elif key == "/":
+                per_source_limit_state["editing"] = False
+                per_source_limit_state["buffer"] = ""
                 search_state["editing"] = True
                 search_state["buffer"] = search_state["query"]
                 refresh_display(
@@ -1098,6 +1271,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key in ("c", "C") and search_state["query"]:
@@ -1113,6 +1288,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key in ("v", "V"):
@@ -1134,10 +1311,14 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key == "1":
                 view_mode_ref[0] = "chronological"
+                per_source_limit_state["editing"] = False
+                per_source_limit_state["buffer"] = ""
                 scroll_ref[0] = 10**9
                 stick_bottom_ref[0] = True
                 persist_ui_state()
@@ -1150,6 +1331,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key == "2":
@@ -1166,10 +1349,14 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key == "3":
                 view_mode_ref[0] = "by_matching_words"
+                per_source_limit_state["editing"] = False
+                per_source_limit_state["buffer"] = ""
                 scroll_ref[0] = 10**9
                 stick_bottom_ref[0] = True
                 persist_ui_state()
@@ -1182,6 +1369,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key in ("g", "G"):
@@ -1205,10 +1394,13 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
-            elif key in ("r", "R"):
-                news_feed.update()
+            elif key in ("n", "N") and view_mode_ref[0] == "per_source":
+                per_source_limit_state["editing"] = True
+                per_source_limit_state["buffer"] = str(per_source_limit_ref[0])
                 refresh_display(
                     term,
                     news_feed,
@@ -1218,6 +1410,23 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
+                    voikko_min_shared_ref,
+                )
+            elif key in ("r", "R"):
+                news_feed.update(fetch_limit_per_source=_feed_fetch_per_source())
+                refresh_display(
+                    term,
+                    news_feed,
+                    view_mode_ref[0],
+                    scroll_ref,
+                    stick_bottom_ref,
+                    column_count_ref,
+                    paint_state,
+                    search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
 
@@ -1233,6 +1442,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_DOWN or key == "j":
@@ -1246,6 +1457,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_PGUP:
@@ -1260,6 +1473,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_PGDOWN:
@@ -1273,6 +1488,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_HOME:
@@ -1287,6 +1504,8 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_END:
@@ -1301,12 +1520,14 @@ def execute(config: NewsAppConfig) -> None:
                     column_count_ref,
                     paint_state,
                     search_state,
+                    per_source_limit_ref,
+                    per_source_limit_state,
                     voikko_min_shared_ref,
                 )
 
             now = time.monotonic()
             if now - last_poll >= interval:
-                if news_feed.update():
+                if news_feed.update(fetch_limit_per_source=_feed_fetch_per_source()):
                     refresh_display(
                         term,
                         news_feed,
@@ -1316,6 +1537,8 @@ def execute(config: NewsAppConfig) -> None:
                         column_count_ref,
                         paint_state,
                         search_state,
+                        per_source_limit_ref,
+                        per_source_limit_state,
                         voikko_min_shared_ref,
                     )
                 last_poll = now
