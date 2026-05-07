@@ -136,6 +136,9 @@ class NewsFeed:
             date_time = parse_date_from_text(article["publishedAt"])
             article["publishedAt"] = self.formatter.format_date(date_time) if date_time else ""
             article["publishedAtTimestamp"] = date_time.timestamp() if date_time else 0
+            article.setdefault("subjects", [])
+            article.setdefault("keywords", [])
+            article.setdefault("guid", "")
         return parsed
 
     def get_news_from_rss_source_and_format(self, source: str, limit: int, text_formatter: TextFormatter) -> NewsResponse:

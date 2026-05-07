@@ -22,6 +22,28 @@ REQUIRED_CONFIG_KEYS = (
     "locales",
 )
 
+_SUPPORTED_LOCALE_BASES = frozenset({"fi", "sv", "en"})
+
+
+def _validate_locales(locales: object, *, config_path: Path) -> None:
+    if not isinstance(locales, list) or len(locales) == 0:
+        raise ValueError(
+            f'config "locales" must be a non-empty JSON array (e.g. ["fi"] or ["sv"]). '
+            f"Config file: {config_path}"
+        )
+    if not all(isinstance(x, str) and str(x).strip() for x in locales):
+        raise ValueError(
+            f'config "locales" must contain only non-empty strings. '
+            f"Config file: {config_path}"
+        )
+    bases = [str(x).strip().split("-")[0].lower() for x in locales]
+    if not any(b in _SUPPORTED_LOCALE_BASES for b in bases):
+        raise ValueError(
+            f'config "locales" must include at least one supported language '
+            f"{sorted(_SUPPORTED_LOCALE_BASES)} (e.g. fi, sv-SE). Got {locales!r}. "
+            f"Config file: {config_path}"
+        )
+
 
 def _explicit_config_dir() -> Optional[Path]:
     """
@@ -188,6 +210,8 @@ def load_app_config() -> NewsAppConfig:
             f"Config file: {config_path}. Reinstall the tool (uv tool install --force .) "
             "if you upgraded from an older version."
         )
+
+    _validate_locales(data["locales"], config_path=config_path)
 
     return NewsAppConfig(
         news_sources=data["news_sources"],

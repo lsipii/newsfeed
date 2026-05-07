@@ -75,40 +75,9 @@ Then run `newsfeed` again. The project version in `pyproject.toml` is bumped whe
 uv sync
 ```
 
-## Voikko (Finnish morphology)
+## Similar content grouping (view 3)
 
-Stem-based grouping (view **3**) uses [Voikko](https://voikko.puimula.org/) for Finnish **base forms** when available. The Python package **`libvoikko`** is listed in `pyproject.toml`, but you also need the **native Voikko library** and a **Finnish morphology dictionary** on the system, or Voikko stays disabled and grouping falls back to Snowball stems only.
-
-**Debian / Ubuntu** (package names may vary slightly):
-
-```bash
-sudo apt install libvoikko1 voikko-fi
-```
-
-**Fedora**:
-
-```bash
-sudo dnf install libvoikko voikko-fi
-```
-
-**macOS** (Homebrew):
-
-```bash
-brew install voikko libvoikko
-```
-
-After installing system packages, reinstall or verify the Python binding:
-
-```bash
-uv tool uninstall newsfeed
-uv tool install .
-```
-
-To **force** the app not to use Voikko (Snowball-only grouping):
-
-```bash
-export NEWSFEED_DISABLE_VOIKKO=1
-```
+The third view builds clusters from overlapping **English Snowball** terms on **title, description, and article body** only—source name, URL, and author are ignored so outlets do not steer clusters. Edges require a fixed minimum number of shared terms after dropping very frequent words; groups are large cliques in that graph (not long weak chains). There is no UI threshold control.
 
 # News source configuration
 
@@ -176,19 +145,17 @@ If you don't want to use the News API, you can skip this step and the program wi
 
 ## Locale configuration
 
-The `locales` setting in JSON config controls which language-specific features are enabled. By default, Finnish (`"fi"`) is enabled.
+`locales` is a **required** key: a non-empty array of language tags. It selects **stopword and meta-word packs** for search and similar-content grouping (view **3**). Each tag’s base language must be one of **`fi`**, **`sv`**, or **`en`** (unknown tags are ignored, but at least one supported base must remain). English core/boiler lists are always merged on top of that.
+
+```json
+{
+	"locales": ["sv"]
+}
+```
 
 ```json
 {
 	"locales": ["fi"]
-}
-```
-
-When Finnish is enabled, the app will attempt to load **Voikko** for accurate Finnish lemmatization in stem-based article grouping. If you only want English news or don't have Finnish morphology data installed, you can disable it:
-
-```json
-{
-	"locales": []
 }
 ```
 

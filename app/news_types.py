@@ -16,6 +16,9 @@ class NewsArticle(TypedDict):
     publishedAt: str
     publishedAtTimestamp: int
     content: str
+    subjects: List[str]
+    keywords: List[str]
+    guid: str
 
 
 class NewsResponse(TypedDict):

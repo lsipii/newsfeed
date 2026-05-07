@@ -191,21 +191,11 @@ wheels = [
 ]
 
 [[package]]
-name = "libvoikko"
-version = "4.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/cd/12/96d70c432646ed26e33eabe114dacecc239ec471787ffca3fdfa8b1c0170/libvoikko-4.3.tar.gz", hash = "sha256:35df124f7d0a5ee8f6d4efbfc1b28613eeceb94925aebc8badd6d40d8ae3b4be", size = 9552, upload-time = "2019-11-22T19:38:53.81Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/db/ab875d42670d92f77d8e73f4799cde51f2145bbddf450f9947074fb775f7/libvoikko-4.3-py3-none-any.whl", hash = "sha256:29abe70c04a21411263c73e005e952d62f641941a7965a41d86f773253577bb1", size = 9726, upload-time = "2019-11-22T19:38:51.338Z" },
-]
-
-[[package]]
 name = "newsfeed"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "blessed" },
-    { name = "libvoikko" },
     { name = "nltk" },
     { name = "platformdirs" },
     { name = "python-dateutil" },
@@ -216,7 +206,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "blessed", specifier = "==1.20.0" },
-    { name = "libvoikko", specifier = ">=4.3,<5" },
     { name = "nltk", specifier = "==3.9.1" },
     { name = "platformdirs", specifier = ">=4,<5" },
     { name = "python-dateutil", specifier = "==2.9.0" },

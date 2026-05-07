@@ -1,7 +1,7 @@
 from dateutil.parser import parse as dateutil_parse
 from zoneinfo import ZoneInfo
 from datetime import datetime
-from typing import Union
+from typing import List, Union
 import re
 
 
@@ -52,3 +52,30 @@ def trim_text(text: Union[str, None]) -> str:
     trimmed_text = text.strip() if text is not None else ""
     # Replace newlines and tabs with spaces
     return re.sub(r"[\n\r\t\v]", " ", trimmed_text)
+
+
+# Values that are only URLs should not act as keyword-style metadata (feeds often ship junk URIs).
+_METADATA_URI_SCHEME_RE = re.compile(
+    r"^(?:https?|ftp)://\S+$|^\S+://\S+$",
+    re.IGNORECASE,
+)
+
+
+def is_uri_like_metadata_token(s: str) -> bool:
+    """True when ``s`` is empty or looks like a URI / URL fragment (not natural-language tags)."""
+    t = trim_text(s)
+    if not t:
+        return True
+    if _METADATA_URI_SCHEME_RE.match(t):
+        return True
+    # ``example.com/path`` or ``www.site.tld/foo`` with no spaces — typical link dumps
+    if " " not in t and "/" in t:
+        if re.match(r"^[a-z0-9][a-z0-9.-]{0,253}\.[a-z]{2,}/\S*$", t, re.IGNORECASE):
+            return True
+    return False
+
+
+def filter_metadata_keywords(keywords: Union[List[str], None]) -> List[str]:
+    if not keywords:
+        return []
+    return [k for k in keywords if not is_uri_like_metadata_token(k)]

@@ -128,9 +128,6 @@ def _clamp_per_source_limit_input(raw: str, fallback: int) -> int:
     return max(1, min(v, MAX_PER_SOURCE_ARTICLES))
 
 
-# Voikko view (mode 3): min pairwise shared stem buckets for a link — cycle (g): 2→3→4→1→2…
-_VOIKKO_SHARED_CYCLE = (2, 3, 4, 1)
-
 # OSC 8 hyperlinks: full URI in the OSC payload; visible text may truncate with ``…``.
 # ST must be ESC \\ (ECMA-48). **tmux** often drops OSC 8 unless passthrough is enabled
 # in ``~/.tmux.conf`` (e.g. ``set -g allow-passthrough on`` and
@@ -688,7 +685,6 @@ def _paint_header(
     search_query: str = "",
     search_editing: bool = False,
     search_buffer: str = "",
-    voikko_shared_k: int = 2,
     per_source_limit: int = 3,
     per_source_limit_editing: bool = False,
     per_source_limit_buffer: str = "",
@@ -699,16 +695,11 @@ def _paint_header(
     title_plain = f"Newsfeed — {label}"
     if view_mode == "per_source":
         title_plain += f" · top {per_source_limit} per source"
-    if view_mode == "by_matching_words":
-        title_plain += f" · shared≥{voikko_shared_k}"
     sq = search_query.strip()
     if sq:
         title_plain += f" · filter: {_clip(sq, max(8, tw - len(title_plain) - 14))}"
     print(term.bold(_clip(title_plain, tw)))
     clear_hint = "(c) Clear filter  " if sq else ""
-    g_hint = (
-        "(g) Shared k  " if view_mode == "by_matching_words" else ""
-    )
     n_hint = (
         "(n) Per-source count  " if view_mode == "per_source" else ""
     )
@@ -716,8 +707,7 @@ def _paint_header(
     # Show 1/1 … 1/N (N = pane count) when cycling (v).
     col_frac = f"1/{cc}"
     help_plain = (
-        "(1) All sources  (2) Per source  (3) Shared stems  "
-        f"{g_hint}"
+        f"(1) All sources  (2) Per source  (3) {VIEW_LABELS['by_matching_words']}  "
         f"{n_hint}"
         f"(v) columns {col_frac} (press v)  "
         "(/) Search  "
@@ -876,7 +866,6 @@ def _paint_full(
     search_query: str = "",
     search_editing: bool = False,
     search_buffer: str = "",
-    voikko_shared_k: int = 2,
     per_source_limit: int = 3,
     per_source_limit_editing: bool = False,
     per_source_limit_buffer: str = "",
@@ -890,7 +879,6 @@ def _paint_full(
         search_query=search_query,
         search_editing=search_editing,
         search_buffer=search_buffer,
-        voikko_shared_k=voikko_shared_k,
         per_source_limit=per_source_limit,
         per_source_limit_editing=per_source_limit_editing,
         per_source_limit_buffer=per_source_limit_buffer,
@@ -910,7 +898,6 @@ def refresh_display(
     search_state: dict[str, Any],
     per_source_limit_ref: List[int],
     per_source_limit_state: dict[str, Any],
-    voikko_min_shared_ref: List[int],
 ) -> None:
     if stick_bottom_ref[0]:
         scroll_ref[0] = 10**9
@@ -932,7 +919,6 @@ def refresh_display(
         articles,
         view_mode,
         per_source_limit=per_source_limit_ref[0],
-        voikko_min_shared_stems=voikko_min_shared_ref[0],
     )
     column_count = max(1, min(column_count_ref[0], _MAX_SPLIT_COLUMNS))
     if column_count_ref[0] != column_count:
@@ -942,7 +928,6 @@ def refresh_display(
     tw_w, tw_h = _tty_dimensions(term)
     hw = (tw_h, tw_w)
     search_digest = (query, editing, buffer)
-    vk = voikko_min_shared_ref[0]
     ps_lim = per_source_limit_ref[0]
     ps_edit = bool(per_source_limit_state.get("editing"))
     ps_buf = str(per_source_limit_state.get("buffer") or "")
@@ -953,7 +938,6 @@ def refresh_display(
         or paint_state.get("hw") != hw
         or paint_state.get("column_count") != column_count
         or paint_state.get("search_digest") != search_digest
-        or paint_state.get("voikko_shared_k") != vk
         or paint_state.get("per_source_digest") != per_source_digest
     )
 
@@ -963,7 +947,6 @@ def refresh_display(
         paint_state["hw"] = hw
         paint_state["column_count"] = column_count
         paint_state["search_digest"] = search_digest
-        paint_state["voikko_shared_k"] = vk
         paint_state["per_source_digest"] = per_source_digest
         _paint_full(
             term,
@@ -975,7 +958,6 @@ def refresh_display(
             search_query=filter_label,
             search_editing=editing,
             search_buffer=buffer,
-            voikko_shared_k=vk,
             per_source_limit=ps_lim,
             per_source_limit_editing=ps_edit,
             per_source_limit_buffer=ps_buf,
@@ -985,7 +967,7 @@ def refresh_display(
 
 
 def execute(config: NewsAppConfig) -> None:
-    set_enabled_locales(config.get("locales", ["fi"]))
+    set_enabled_locales(config["locales"])
     news_feed = NewsFeed(
         config=config,
     )
@@ -1011,11 +993,6 @@ def execute(config: NewsAppConfig) -> None:
     column_count_ref: List[int] = [_initial_column_count(saved_ui)]
     paint_state: dict[str, Any] = {}
     search_state: dict[str, Any] = {"query": "", "editing": False, "buffer": ""}
-    voikko_min_shared_ref: List[int] = (
-        [int(saved_ui["voikko_min_shared_k"])]
-        if "voikko_min_shared_k" in saved_ui
-        else [2]
-    )
 
     def _initial_per_source_article_limit(saved: Dict[str, Any]) -> int:
         v = saved.get("per_source_article_limit")
@@ -1038,7 +1015,6 @@ def execute(config: NewsAppConfig) -> None:
             {
                 "view_mode": view_mode_ref[0],
                 "column_count": column_count_ref[0],
-                "voikko_min_shared_k": voikko_min_shared_ref[0],
                 "per_source_article_limit": per_source_limit_ref[0],
             }
         )
@@ -1055,7 +1031,6 @@ def execute(config: NewsAppConfig) -> None:
             search_state,
             per_source_limit_ref,
             per_source_limit_state,
-            voikko_min_shared_ref,
         )
 
     signal.signal(signal.SIGWINCH, on_resize)
@@ -1079,7 +1054,6 @@ def execute(config: NewsAppConfig) -> None:
             search_state,
             per_source_limit_ref,
             per_source_limit_state,
-            voikko_min_shared_ref,
         )
         if not ui_state_file_path().exists():
             persist_ui_state()
@@ -1109,7 +1083,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                     continue
                 if key.code == term.KEY_ENTER or key in ("\r", "\n"):
@@ -1129,7 +1102,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                     continue
                 if key.code == term.KEY_BACKSPACE or key in ("\x7f", "\b"):
@@ -1145,7 +1117,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                     continue
                 one = str(key)
@@ -1162,7 +1133,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                     continue
                 continue
@@ -1186,7 +1156,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                     continue
                 if key.code == term.KEY_ENTER or key in ("\r", "\n"):
@@ -1213,7 +1182,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                     continue
                 if key.code == term.KEY_BACKSPACE or key in ("\x7f", "\b"):
@@ -1231,7 +1199,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                     continue
                 one = str(key)
@@ -1250,7 +1217,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                     continue
                 continue
@@ -1273,7 +1239,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key in ("c", "C") and search_state["query"]:
                 search_state["query"] = ""
@@ -1290,7 +1255,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key in ("v", "V"):
                 cur = max(1, min(column_count_ref[0], _MAX_SPLIT_COLUMNS))
@@ -1313,7 +1277,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key == "1":
                 view_mode_ref[0] = "chronological"
@@ -1333,7 +1296,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key == "2":
                 view_mode_ref[0] = "per_source"
@@ -1351,7 +1313,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key == "3":
                 view_mode_ref[0] = "by_matching_words"
@@ -1371,32 +1332,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
-                )
-            elif key in ("g", "G"):
-                cur = voikko_min_shared_ref[0]
-                try:
-                    idx = _VOIKKO_SHARED_CYCLE.index(cur)
-                except ValueError:
-                    idx = -1
-                voikko_min_shared_ref[0] = _VOIKKO_SHARED_CYCLE[
-                    (idx + 1) % len(_VOIKKO_SHARED_CYCLE)
-                ]
-                scroll_ref[0] = 10**9
-                stick_bottom_ref[0] = True
-                persist_ui_state()
-                refresh_display(
-                    term,
-                    news_feed,
-                    view_mode_ref[0],
-                    scroll_ref,
-                    stick_bottom_ref,
-                    column_count_ref,
-                    paint_state,
-                    search_state,
-                    per_source_limit_ref,
-                    per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key in ("n", "N") and view_mode_ref[0] == "per_source":
                 per_source_limit_state["editing"] = True
@@ -1412,7 +1347,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key in ("r", "R"):
                 news_feed.update(fetch_limit_per_source=_feed_fetch_per_source())
@@ -1427,7 +1361,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
 
             elif key.code == term.KEY_UP or key == "k":
@@ -1444,7 +1377,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_DOWN or key == "j":
                 scroll_ref[0] += 1
@@ -1459,7 +1391,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_PGUP:
                 scroll_ref[0] -= _viewport_height(term)
@@ -1475,7 +1406,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_PGDOWN:
                 scroll_ref[0] += _viewport_height(term)
@@ -1490,7 +1420,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_HOME:
                 scroll_ref[0] = 0
@@ -1506,7 +1435,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
             elif key.code == term.KEY_END:
                 scroll_ref[0] = 10**9
@@ -1522,7 +1450,6 @@ def execute(config: NewsAppConfig) -> None:
                     search_state,
                     per_source_limit_ref,
                     per_source_limit_state,
-                    voikko_min_shared_ref,
                 )
 
             now = time.monotonic()
@@ -1539,7 +1466,6 @@ def execute(config: NewsAppConfig) -> None:
                         search_state,
                         per_source_limit_ref,
                         per_source_limit_state,
-                        voikko_min_shared_ref,
                     )
                 last_poll = now
 
