@@ -1,5 +1,15 @@
 {
     "news_sources": [
+        "https://www.wired.com/feed/rss",
+        "https://phys.org/rss-feed/",
+        "https://www.theregister.com/?lab_viewport=rss",
+        "https://www.bbc.co.uk/news/rss.xml",
+        "https://www.techradar.com/rss",
+        "https://www.cnet.com/rss/news/",
+        "https://www.zdnet.com/news/rss.xml",
+        "https://www.arstechnica.com/feed/",
+        "https://www.sciencenews.org/feed",
+        "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
         "https://www.hs.fi/rss/tuoreimmat.xml",
         "https://www.is.fi/rss/tuoreimmat.xml",
         "https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_UUTISET",
@@ -10,7 +20,6 @@
         "https://wp.tekniikanmaailma.fi/feed/",
         "https://www.iltalehti.fi/rss/uutiset.xml",
         "https://www.mtvuutiset.fi/api/feed/rss/uutiset_uusimmat",
-        "https://www.pelaaja.fi/feed/",
         "https://www.uusisuomi.fi/api/feed/v2/rss/us"
     ],
     "date_time_format": "%d.%m.%Y %H:%M:%S",
